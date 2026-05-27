@@ -66,17 +66,17 @@ func NewRouter(
 			// Drivers
 			r.Get("/drivers", driverHandler.GetDrivers)
 			r.Get("/drivers/{id}", driverHandler.GetDriverByID)
-			r.Post("/drivers", driverHandler.CreateDriver)
+			r.With(customMiddleware.RequireRole("owner", "admin")).Post("/drivers", driverHandler.CreateDriver)
 
 			// Trips
 			r.Get("/trips", tripHandler.GetTrips)
 			r.Get("/trips/{id}", tripHandler.GetTripByID)
-			r.Put("/trips/{id}", tripHandler.UpdateTrip)
+			r.With(customMiddleware.RequireRole("owner", "admin", "operator")).Put("/trips/{id}", tripHandler.UpdateTrip)
 
 			// Incidents
 			r.Get("/incidents", incidentHandler.GetIncidents)
-			r.Post("/incidents", incidentHandler.CreateIncident)
-			r.Put("/incidents/{id}", incidentHandler.UpdateIncident)
+			r.With(customMiddleware.RequireRole("owner", "admin", "operator")).Post("/incidents", incidentHandler.CreateIncident)
+			r.With(customMiddleware.RequireRole("owner", "admin", "operator")).Put("/incidents/{id}", incidentHandler.UpdateIncident)
 		})
 	})
 

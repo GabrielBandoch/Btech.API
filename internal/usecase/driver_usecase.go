@@ -7,9 +7,9 @@ import (
 )
 
 type DriverUseCase interface {
-	GetDrivers(ctx context.Context) ([]domain.Driver, error)
-	GetDriverByID(ctx context.Context, id string) (domain.Driver, error)
-	CreateDriver(ctx context.Context, driver domain.Driver) (domain.Driver, error)
+	GetDrivers(ctx context.Context, orgID string) ([]domain.Driver, error)
+	GetDriverByID(ctx context.Context, orgID string, id string) (domain.Driver, error)
+	CreateDriver(ctx context.Context, orgID string, driver domain.Driver) (domain.Driver, error)
 }
 
 type driverUseCase struct {
@@ -23,17 +23,17 @@ func NewDriverUseCase(repo domain.DriverRepository) DriverUseCase {
 	}
 }
 
-// GetDrivers retrieves all drivers from the repository.
-func (uc *driverUseCase) GetDrivers(ctx context.Context) ([]domain.Driver, error) {
-	return uc.repo.GetAll(ctx)
+// GetDrivers retrieves all drivers for the organization.
+func (uc *driverUseCase) GetDrivers(ctx context.Context, orgID string) ([]domain.Driver, error) {
+	return uc.repo.GetAll(ctx, orgID)
 }
 
-// GetDriverByID retrieves a single driver by their ID.
-func (uc *driverUseCase) GetDriverByID(ctx context.Context, id string) (domain.Driver, error) {
-	return uc.repo.GetByID(ctx, id)
+// GetDriverByID retrieves a single driver by their ID within the organization.
+func (uc *driverUseCase) GetDriverByID(ctx context.Context, orgID string, id string) (domain.Driver, error) {
+	return uc.repo.GetByID(ctx, orgID, id)
 }
 
-// CreateDriver registers a new driver.
-func (uc *driverUseCase) CreateDriver(ctx context.Context, driver domain.Driver) (domain.Driver, error) {
-	return uc.repo.Create(ctx, driver)
+// CreateDriver registers a new driver for the organization.
+func (uc *driverUseCase) CreateDriver(ctx context.Context, orgID string, driver domain.Driver) (domain.Driver, error) {
+	return uc.repo.Create(ctx, orgID, driver)
 }

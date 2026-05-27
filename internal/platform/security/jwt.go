@@ -13,16 +13,18 @@ var (
 )
 
 type JWTClaims struct {
-	UserID string `json:"user_id"`
-	Role   string `json:"role"`
+	UserID         string `json:"user_id"`
+	OrganizationID string `json:"organization_id"`
+	Role           string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-// GenerateToken creates a new JWT token for a given user ID and role.
-func GenerateToken(userID, role, secret string, duration time.Duration) (string, error) {
+// GenerateToken creates a new JWT token for a given user ID, organization ID, and role.
+func GenerateToken(userID, orgID, role, secret string, duration time.Duration) (string, error) {
 	claims := JWTClaims{
-		UserID: userID,
-		Role:   role,
+		UserID:         userID,
+		OrganizationID: orgID,
+		Role:           role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

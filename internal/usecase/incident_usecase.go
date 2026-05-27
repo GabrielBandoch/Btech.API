@@ -7,9 +7,9 @@ import (
 )
 
 type IncidentUseCase interface {
-	GetIncidents(ctx context.Context) ([]domain.Incident, error)
-	CreateIncident(ctx context.Context, incident domain.Incident) (domain.Incident, error)
-	UpdateIncident(ctx context.Context, id string, incident domain.Incident) (domain.Incident, error)
+	GetIncidents(ctx context.Context, orgID string) ([]domain.Incident, error)
+	CreateIncident(ctx context.Context, orgID string, incident domain.Incident) (domain.Incident, error)
+	UpdateIncident(ctx context.Context, orgID string, id string, incident domain.Incident) (domain.Incident, error)
 }
 
 type incidentUseCase struct {
@@ -23,17 +23,17 @@ func NewIncidentUseCase(repo domain.IncidentRepository) IncidentUseCase {
 	}
 }
 
-// GetIncidents retrieves all incidents.
-func (uc *incidentUseCase) GetIncidents(ctx context.Context) ([]domain.Incident, error) {
-	return uc.repo.GetAll(ctx)
+// GetIncidents retrieves all incidents for the organization.
+func (uc *incidentUseCase) GetIncidents(ctx context.Context, orgID string) ([]domain.Incident, error) {
+	return uc.repo.GetAll(ctx, orgID)
 }
 
-// CreateIncident registers a new incident.
-func (uc *incidentUseCase) CreateIncident(ctx context.Context, incident domain.Incident) (domain.Incident, error) {
-	return uc.repo.Create(ctx, incident)
+// CreateIncident registers a new incident for the organization.
+func (uc *incidentUseCase) CreateIncident(ctx context.Context, orgID string, incident domain.Incident) (domain.Incident, error) {
+	return uc.repo.Create(ctx, orgID, incident)
 }
 
-// UpdateIncident updates incident attributes.
-func (uc *incidentUseCase) UpdateIncident(ctx context.Context, id string, incident domain.Incident) (domain.Incident, error) {
-	return uc.repo.Update(ctx, id, incident)
+// UpdateIncident updates incident attributes within the organization.
+func (uc *incidentUseCase) UpdateIncident(ctx context.Context, orgID string, id string, incident domain.Incident) (domain.Incident, error) {
+	return uc.repo.Update(ctx, orgID, id, incident)
 }

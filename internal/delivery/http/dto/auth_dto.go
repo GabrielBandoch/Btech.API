@@ -9,12 +9,15 @@ import (
 )
 
 type UserResponse struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Email            string    `json:"email"`
+	Role             string    `json:"role"`
+	OrganizationID   string    `json:"organizationId"`
+	OrganizationName string    `json:"organizationName"`
+	OrganizationSlug string    `json:"organizationSlug"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
 type RegisterRequest struct {
@@ -35,14 +38,17 @@ type AuthResponse struct {
 }
 
 // UserToResponse maps a domain.User to a UserResponse DTO.
-func UserToResponse(u *domain.User) UserResponse {
+func UserToResponse(u *domain.User, orgName, orgSlug string) UserResponse {
 	return UserResponse{
-		ID:        u.ID,
-		Name:      u.Name,
-		Email:     u.Email,
-		Role:      u.Role,
-		CreatedAt: u.CreatedAt,
-		UpdatedAt: u.UpdatedAt,
+		ID:               u.ID,
+		Name:             u.Name,
+		Email:            u.Email,
+		Role:             u.Role,
+		OrganizationID:   u.OrganizationID,
+		OrganizationName: orgName,
+		OrganizationSlug: orgSlug,
+		CreatedAt:        u.CreatedAt,
+		UpdatedAt:        u.UpdatedAt,
 	}
 }
 
@@ -66,8 +72,8 @@ func (r *RegisterRequest) Validate() error {
 	}
 
 	role := strings.ToLower(strings.TrimSpace(r.Role))
-	if role != "" && role != "operator" && role != "admin" && role != "manager" {
-		return errors.New("role must be either operator, admin, or manager")
+	if role != "" && role != "owner" && role != "admin" && role != "operator" && role != "viewer" {
+		return errors.New("role must be either owner, admin, operator, or viewer")
 	}
 
 	return nil

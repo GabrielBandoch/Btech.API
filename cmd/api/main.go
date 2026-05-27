@@ -57,12 +57,22 @@ func main() {
 	// 4. Dependency Injection
 	// Repositories
 	userRepo := postgres.NewPostgresUserRepository(db.Pool)
+	orgRepo := postgres.NewPostgresOrganizationRepository(db.Pool)
 	driverRepo := memory.NewMemoryDriverRepository()
 	tripRepo := memory.NewMemoryTripRepository()
 	incidentRepo := memory.NewMemoryIncidentRepository()
 
+	// Auto-seed development database if in development mode
+	if cfg.Env == "development" {
+		seedCtx, seedCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := database.SeedDevelopmentDatabase(seedCtx, db.Pool, userRepo, orgRepo, cfg.BCryptCost, log); err != nil {
+			log.Warn("Failed to seed development database", slog.String("err", err.Error()))
+		}
+		seedCancel()
+	}
+
 	// UseCases
-	authUseCase := usecase.NewAuthUseCase(userRepo, cfg.JWTSecret, jwtDuration, cfg.BCryptCost)
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, cfg.JWTSecret, jwtDuration, cfg.BCryptCost)
 	driverUseCase := usecase.NewDriverUseCase(driverRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo)

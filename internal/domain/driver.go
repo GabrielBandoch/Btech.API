@@ -4,6 +4,7 @@ import "context"
 
 type Driver struct {
 	ID               string
+	OrganizationID   string
 	Name             string
 	Avatar           string
 	Status           string
@@ -18,7 +19,7 @@ type Driver struct {
 }
 
 type DriverRepository interface {
-	GetAll(ctx context.Context) ([]Driver, error)
-	GetByID(ctx context.Context, id string) (Driver, error)
-	Create(ctx context.Context, driver Driver) (Driver, error)
+	GetAll(ctx context.Context, orgID string) ([]Driver, error)
+	GetByID(ctx context.Context, orgID string, id string) (Driver, error)
+	Create(ctx context.Context, orgID string, driver Driver) (Driver, error)
 }

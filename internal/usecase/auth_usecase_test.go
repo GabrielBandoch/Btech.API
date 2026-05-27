@@ -50,15 +50,65 @@ func (m *mockUserRepository) Create(ctx context.Context, user *domain.User) erro
 	return nil
 }
 
+type mockOrganizationRepository struct {
+	orgs     map[string]*domain.Organization
+	orgUsers map[string]*domain.OrganizationUser
+}
+
+func newMockOrganizationRepository() *mockOrganizationRepository {
+	return &mockOrganizationRepository{
+		orgs:     make(map[string]*domain.Organization),
+		orgUsers: make(map[string]*domain.OrganizationUser),
+	}
+}
+
+func (m *mockOrganizationRepository) Create(ctx context.Context, org *domain.Organization) error {
+	m.orgs[org.ID] = org
+	return nil
+}
+
+func (m *mockOrganizationRepository) GetByID(ctx context.Context, id string) (*domain.Organization, error) {
+	org, ok := m.orgs[id]
+	if !ok {
+		return nil, domain.ErrOrganizationNotFound
+	}
+	return org, nil
+}
+
+func (m *mockOrganizationRepository) GetBySlug(ctx context.Context, slug string) (*domain.Organization, error) {
+	for _, org := range m.orgs {
+		if org.Slug == slug {
+			return org, nil
+		}
+	}
+	return nil, domain.ErrOrganizationNotFound
+}
+
+func (m *mockOrganizationRepository) CreateOrganizationUser(ctx context.Context, orgUser *domain.OrganizationUser) error {
+	key := orgUser.OrganizationID + ":" + orgUser.UserID
+	m.orgUsers[key] = orgUser
+	return nil
+}
+
+func (m *mockOrganizationRepository) GetOrganizationUser(ctx context.Context, orgID, userID string) (*domain.OrganizationUser, error) {
+	key := orgID + ":" + userID
+	ou, ok := m.orgUsers[key]
+	if !ok {
+		return nil, domain.ErrOrgUserNotFound
+	}
+	return ou, nil
+}
+
 func TestAuthUseCase_RegisterUser(t *testing.T) {
 	repo := newMockUserRepository()
+	orgRepo := newMockOrganizationRepository()
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, secret, 1*time.Hour, 4) // cost = 4 for fast tests
+	uc := NewAuthUseCase(repo, orgRepo, secret, 1*time.Hour, 4) // cost = 4 for fast tests
 
 	ctx := context.Background()
 
 	// 1. Success case
-	user, err := uc.RegisterUser(ctx, "John Doe", "JOHN@Example.com", "secure123", "manager")
+	user, err := uc.RegisterUser(ctx, "John Doe", "JOHN@Example.com", "SecurePassword123!", "admin")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -71,22 +121,22 @@ func TestAuthUseCase_RegisterUser(t *testing.T) {
 		t.Errorf("expected normalized email john@example.com, got %s", user.Email)
 	}
 
-	if user.Role != "manager" {
-		t.Errorf("expected role manager, got %s", user.Role)
+	if user.Role != "admin" {
+		t.Errorf("expected role admin, got %s", user.Role)
 	}
 
-	if user.PasswordHash == "secure123" {
+	if user.PasswordHash == "SecurePassword123!" {
 		t.Error("expected password to be hashed, but got plain text")
 	}
 
 	// 2. Duplicate email case
-	_, err = uc.RegisterUser(ctx, "Other Name", "john@example.com", "pass123", "operator")
+	_, err = uc.RegisterUser(ctx, "Other Name", "john@example.com", "SecurePassword123!", "operator")
 	if !errors.Is(err, ErrEmailExists) {
 		t.Errorf("expected ErrEmailExists, got %v", err)
 	}
 
 	// 3. Invalid role case
-	_, err = uc.RegisterUser(ctx, "Invalid Role", "valid@example.com", "pass123", "invalid_role")
+	_, err = uc.RegisterUser(ctx, "Invalid Role", "valid@example.com", "SecurePassword123!", "invalid_role")
 	if !errors.Is(err, ErrInvalidRole) {
 		t.Errorf("expected ErrInvalidRole, got %v", err)
 	}
@@ -94,19 +144,20 @@ func TestAuthUseCase_RegisterUser(t *testing.T) {
 
 func TestAuthUseCase_LoginUser(t *testing.T) {
 	repo := newMockUserRepository()
+	orgRepo := newMockOrganizationRepository()
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, secret, 1*time.Hour, 4)
+	uc := NewAuthUseCase(repo, orgRepo, secret, 1*time.Hour, 4)
 
 	ctx := context.Background()
 
 	// Register a user first
-	_, err := uc.RegisterUser(ctx, "Alice Smith", "alice@example.com", "password123", "operator")
+	_, err := uc.RegisterUser(ctx, "Alice Smith", "alice@example.com", "SecurePassword123!", "operator")
 	if err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
 
 	// 1. Success login
-	user, token, err := uc.LoginUser(ctx, "ALICE@example.com", "password123")
+	user, token, err := uc.LoginUser(ctx, "ALICE@example.com", "SecurePassword123!")
 	if err != nil {
 		t.Fatalf("expected no error on login, got %v", err)
 	}
@@ -140,7 +191,7 @@ func TestAuthUseCase_LoginUser(t *testing.T) {
 	}
 
 	// 3. User not found
-	_, _, err = uc.LoginUser(ctx, "unknown@example.com", "password123")
+	_, _, err = uc.LoginUser(ctx, "unknown@example.com", "SecurePassword123!")
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Errorf("expected ErrInvalidCredentials, got %v", err)
 	}
@@ -148,23 +199,24 @@ func TestAuthUseCase_LoginUser(t *testing.T) {
 
 func TestAuthUseCase_ValidateToken(t *testing.T) {
 	repo := newMockUserRepository()
+	orgRepo := newMockOrganizationRepository()
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, secret, 1*time.Second, 4)
+	uc := NewAuthUseCase(repo, orgRepo, secret, 1*time.Second, 4)
 
 	ctx := context.Background()
 
-	user, err := uc.RegisterUser(ctx, "Bob Jones", "bob@example.com", "password123", "admin")
+	user, err := uc.RegisterUser(ctx, "Bob Jones", "bob@example.com", "SecurePassword123!", "admin")
 	if err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
 
-	_, token, err := uc.LoginUser(ctx, "bob@example.com", "password123")
+	_, token, err := uc.LoginUser(ctx, "bob@example.com", "SecurePassword123!")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
 
 	// 1. Valid token
-	validatedUser, err := uc.ValidateToken(ctx, token)
+	validatedUser, claims, err := uc.ValidateToken(ctx, token)
 	if err != nil {
 		t.Fatalf("expected token validation to succeed, got %v", err)
 	}
@@ -173,9 +225,13 @@ func TestAuthUseCase_ValidateToken(t *testing.T) {
 		t.Errorf("expected validated user ID %s, got %s", user.ID, validatedUser.ID)
 	}
 
+	if claims.UserID != user.ID {
+		t.Errorf("expected claims UserID %s, got %s", user.ID, claims.UserID)
+	}
+
 	// 2. Expired token
 	time.Sleep(1500 * time.Millisecond)
-	_, err = uc.ValidateToken(ctx, token)
+	_, _, err = uc.ValidateToken(ctx, token)
 	if err == nil {
 		t.Error("expected error for expired token, got nil")
 	}

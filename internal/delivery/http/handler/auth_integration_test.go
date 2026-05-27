@@ -66,21 +66,27 @@ func TestAuthIntegration(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Clear users table for clean test environment
-	_, err = db.Pool.Exec(context.Background(), "TRUNCATE TABLE users")
+	// Run migrations
+	if err := database.RunMigrations(cfg.DatabaseURL, "../../../../migrations", log); err != nil {
+		t.Fatalf("failed to run database migrations: %v", err)
+	}
+
+	// Clear tables for clean test environment
+	_, err = db.Pool.Exec(context.Background(), "TRUNCATE TABLE users, organizations CASCADE")
 	if err != nil {
 		t.Fatalf("failed to truncate users table: %v", err)
 	}
 
 	// Setup UseCases, Router and Middleware
 	userRepo := postgres.NewPostgresUserRepository(db.Pool)
+	orgRepo := postgres.NewPostgresOrganizationRepository(db.Pool)
 	driverRepo := memory.NewMemoryDriverRepository()
 	tripRepo := memory.NewMemoryTripRepository()
 	incidentRepo := memory.NewMemoryIncidentRepository()
 
 	// Short-lived JWT expiration (2 seconds) for expiration verification
 	jwtExpires := 2 * time.Second
-	authUseCase := usecase.NewAuthUseCase(userRepo, cfg.JWTSecret, jwtExpires, 4) // cost = 4 for fast testing
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, cfg.JWTSecret, jwtExpires, 4) // cost = 4 for fast testing
 	driverUseCase := usecase.NewDriverUseCase(driverRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo)
@@ -99,7 +105,7 @@ func TestAuthIntegration(t *testing.T) {
 
 	// Test 1: POST /auth/register - Success (Satisfies new password policy)
 	t.Run("Register_Success", func(t *testing.T) {
-		regPayload := `{"name":"Ricardo Silva","email":"RICARDO@btech.com","password":"SecurePassword123!","role":"manager"}`
+		regPayload := `{"name":"Ricardo Silva","email":"RICARDO@btech.com","password":"SecurePassword123!","role":"admin"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(regPayload))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -290,13 +296,30 @@ func TestAuthIntegration(t *testing.T) {
 	})
 }
 
+type mockOrgRepoForLimit struct{}
+
+func (m *mockOrgRepoForLimit) Create(ctx context.Context, org *domain.Organization) error { return nil }
+func (m *mockOrgRepoForLimit) GetByID(ctx context.Context, id string) (*domain.Organization, error) {
+	return &domain.Organization{ID: id, Name: "Mock Org", Slug: "mock-org"}, nil
+}
+func (m *mockOrgRepoForLimit) GetBySlug(ctx context.Context, slug string) (*domain.Organization, error) {
+	return &domain.Organization{ID: "mock-id", Name: "Mock Org", Slug: slug}, nil
+}
+func (m *mockOrgRepoForLimit) CreateOrganizationUser(ctx context.Context, orgUser *domain.OrganizationUser) error {
+	return nil
+}
+func (m *mockOrgRepoForLimit) GetOrganizationUser(ctx context.Context, orgID, userID string) (*domain.OrganizationUser, error) {
+	return &domain.OrganizationUser{ID: "mock-mapping-id", OrganizationID: orgID, UserID: userID, Role: "operator"}, nil
+}
+
 func TestAuthRateLimiting(t *testing.T) {
 	log := logger.New("development")
 	cfg := config.Load()
 	
 	// Create mock dependencies to prevent DB connection panics
 	userRepo := &mockUserRepoForLimit{}
-	authUseCase := usecase.NewAuthUseCase(userRepo, cfg.JWTSecret, 1*time.Hour, 4)
+	orgRepo := &mockOrgRepoForLimit{}
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, cfg.JWTSecret, 1*time.Hour, 4)
 	authHandler := handler.NewAuthHandler(authUseCase)
 	
 	driverRepo := memory.NewMemoryDriverRepository()

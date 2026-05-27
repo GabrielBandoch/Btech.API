@@ -7,9 +7,9 @@ import (
 )
 
 type TripUseCase interface {
-	GetTrips(ctx context.Context) ([]domain.Trip, error)
-	GetTripByID(ctx context.Context, id string) (domain.Trip, error)
-	UpdateTrip(ctx context.Context, id string, trip domain.Trip) (domain.Trip, error)
+	GetTrips(ctx context.Context, orgID string) ([]domain.Trip, error)
+	GetTripByID(ctx context.Context, orgID string, id string) (domain.Trip, error)
+	UpdateTrip(ctx context.Context, orgID string, id string, trip domain.Trip) (domain.Trip, error)
 }
 
 type tripUseCase struct {
@@ -23,17 +23,17 @@ func NewTripUseCase(repo domain.TripRepository) TripUseCase {
 	}
 }
 
-// GetTrips retrieves all trips.
-func (uc *tripUseCase) GetTrips(ctx context.Context) ([]domain.Trip, error) {
-	return uc.repo.GetAll(ctx)
+// GetTrips retrieves all trips for the organization.
+func (uc *tripUseCase) GetTrips(ctx context.Context, orgID string) ([]domain.Trip, error) {
+	return uc.repo.GetAll(ctx, orgID)
 }
 
-// GetTripByID retrieves a single trip by ID.
-func (uc *tripUseCase) GetTripByID(ctx context.Context, id string) (domain.Trip, error) {
-	return uc.repo.GetByID(ctx, id)
+// GetTripByID retrieves a single trip by ID within the organization.
+func (uc *tripUseCase) GetTripByID(ctx context.Context, orgID string, id string) (domain.Trip, error) {
+	return uc.repo.GetByID(ctx, orgID, id)
 }
 
-// UpdateTrip updates trip attributes.
-func (uc *tripUseCase) UpdateTrip(ctx context.Context, id string, trip domain.Trip) (domain.Trip, error) {
-	return uc.repo.Update(ctx, id, trip)
+// UpdateTrip updates trip attributes within the organization.
+func (uc *tripUseCase) UpdateTrip(ctx context.Context, orgID string, id string, trip domain.Trip) (domain.Trip, error) {
+	return uc.repo.Update(ctx, orgID, id, trip)
 }

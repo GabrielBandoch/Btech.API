@@ -11,6 +11,7 @@ type Checkpoint struct {
 
 type Trip struct {
 	ID                  string
+	OrganizationID      string
 	Origin              string
 	Destination         string
 	Status              string
@@ -31,7 +32,7 @@ type Trip struct {
 }
 
 type TripRepository interface {
-	GetAll(ctx context.Context) ([]Trip, error)
-	GetByID(ctx context.Context, id string) (Trip, error)
-	Update(ctx context.Context, id string, trip Trip) (Trip, error)
+	GetAll(ctx context.Context, orgID string) ([]Trip, error)
+	GetByID(ctx context.Context, orgID string, id string) (Trip, error)
+	Update(ctx context.Context, orgID string, id string, trip Trip) (Trip, error)
 }

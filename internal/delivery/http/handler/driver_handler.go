@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/dto"
+	"github.com/btech/fleetcontrol-api/internal/delivery/http/middleware"
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/response"
 	"github.com/btech/fleetcontrol-api/internal/usecase"
 	"github.com/go-chi/chi/v5"
@@ -24,8 +25,13 @@ func NewDriverHandler(useCase usecase.DriverUseCase) *DriverHandler {
 // GetDrivers handles fetching all drivers.
 func (h *DriverHandler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	orgID, ok := middleware.OrganizationIDFromContext(ctx)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized: organization context missing")
+		return
+	}
 
-	drivers, err := h.useCase.GetDrivers(ctx)
+	drivers, err := h.useCase.GetDrivers(ctx, orgID)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to retrieve drivers")
 		return
@@ -38,13 +44,19 @@ func (h *DriverHandler) GetDrivers(w http.ResponseWriter, r *http.Request) {
 // GetDriverByID handles fetching a single driver by their ID.
 func (h *DriverHandler) GetDriverByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	orgID, ok := middleware.OrganizationIDFromContext(ctx)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized: organization context missing")
+		return
+	}
+
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		response.Error(w, http.StatusBadRequest, "driver ID is required")
 		return
 	}
 
-	drv, err := h.useCase.GetDriverByID(ctx, id)
+	drv, err := h.useCase.GetDriverByID(ctx, orgID, id)
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "driver not found")
 		return
@@ -56,6 +68,11 @@ func (h *DriverHandler) GetDriverByID(w http.ResponseWriter, r *http.Request) {
 // CreateDriver handles registering a new driver.
 func (h *DriverHandler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	orgID, ok := middleware.OrganizationIDFromContext(ctx)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized: organization context missing")
+		return
+	}
 
 	var req dto.CreateDriverRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -68,7 +85,7 @@ func (h *DriverHandler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.useCase.CreateDriver(ctx, req.ToDomain())
+	created, err := h.useCase.CreateDriver(ctx, orgID, req.ToDomain())
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to create driver")
 		return

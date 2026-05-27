@@ -45,7 +45,13 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.JSON(w, http.StatusCreated, true, dto.UserToResponse(user), "")
+	org, err := h.authUseCase.GetOrganizationByID(r.Context(), user.OrganizationID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to retrieve organization details")
+		return
+	}
+
+	response.JSON(w, http.StatusCreated, true, dto.UserToResponse(user, org.Name, org.Slug), "")
 }
 
 // Login handles authenticating a user.
@@ -71,8 +77,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	org, err := h.authUseCase.GetOrganizationByID(r.Context(), user.OrganizationID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to retrieve organization details")
+		return
+	}
+
 	resp := dto.AuthResponse{
-		User:  dto.UserToResponse(user),
+		User:  dto.UserToResponse(user, org.Name, org.Slug),
 		Token: token,
 	}
 	response.OK(w, resp)
@@ -86,5 +98,11 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response.OK(w, dto.UserToResponse(user))
+	org, err := h.authUseCase.GetOrganizationByID(r.Context(), user.OrganizationID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to retrieve organization details")
+		return
+	}
+
+	response.OK(w, dto.UserToResponse(user, org.Name, org.Slug))
 }
