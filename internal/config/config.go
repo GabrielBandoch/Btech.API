@@ -13,6 +13,10 @@ type Config struct {
 	FrontendURL    string
 	APIVersion     string
 	TimeoutSeconds int
+	DatabaseURL    string
+	JWTSecret      string
+	JWTExpiresIn   string
+	BCryptCost     int
 }
 
 // Load reads settings from the environment and loads a .env file if available.
@@ -35,7 +39,7 @@ func Load() *Config {
 
 	frontendURL := os.Getenv("FRONTEND_URL")
 	if frontendURL == "" {
-		frontendURL = "http://localhost:5174"
+		frontendURL = "http://localhost:5173"
 	}
 
 	apiVersion := os.Getenv("API_VERSION")
@@ -51,12 +55,40 @@ func Load() *Config {
 		}
 	}
 
+	dbURL := os.Getenv("DATABASE_URL")
+	// default connection string if not specified
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/fleetcontrol?sslmode=disable"
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "supersecretchangeinproduction"
+	}
+
+	jwtExpiresIn := os.Getenv("JWT_EXPIRES_IN")
+	if jwtExpiresIn == "" {
+		jwtExpiresIn = "24h"
+	}
+
+	bcryptCostStr := os.Getenv("BCRYPT_COST")
+	bcryptCost := 10 // default
+	if bcryptCostStr != "" {
+		if val, err := strconv.Atoi(bcryptCostStr); err == nil && val >= 4 && val <= 31 {
+			bcryptCost = val
+		}
+	}
+
 	return &Config{
 		Port:           port,
 		Env:            env,
 		FrontendURL:    frontendURL,
 		APIVersion:     apiVersion,
 		TimeoutSeconds: timeoutSec,
+		DatabaseURL:    dbURL,
+		JWTSecret:      jwtSecret,
+		JWTExpiresIn:   jwtExpiresIn,
+		BCryptCost:     bcryptCost,
 	}
 }
 

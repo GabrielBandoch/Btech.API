@@ -11,4 +11,27 @@ services:
     environment:
       - PORT=8080
       - ENV=development
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/fleetcontrol?sslmode=disable
+      - JWT_SECRET=supersecretchangeinproduction
+      - JWT_EXPIRES_IN=24h
+      - BCRYPT_COST=10
+    depends_on:
+      - db
     restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: btech-db
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fleetcontrol
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
