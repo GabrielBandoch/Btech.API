@@ -17,6 +17,8 @@ type Config struct {
 	JWTSecret      string
 	JWTExpiresIn   string
 	BCryptCost     int
+	RateLimitRate  float64
+	RateLimitBurst float64
 }
 
 // Load reads settings from the environment and loads a .env file if available.
@@ -79,6 +81,22 @@ func Load() *Config {
 		}
 	}
 
+	rateLimitRateStr := os.Getenv("RATE_LIMIT_RATE")
+	rateLimitRate := 0.1667 // default: 10 requests per minute
+	if rateLimitRateStr != "" {
+		if val, err := strconv.ParseFloat(rateLimitRateStr, 64); err == nil && val > 0 {
+			rateLimitRate = val
+		}
+	}
+
+	rateLimitBurstStr := os.Getenv("RATE_LIMIT_BURST")
+	rateLimitBurst := 10.0 // default: 10 requests burst capacity
+	if rateLimitBurstStr != "" {
+		if val, err := strconv.ParseFloat(rateLimitBurstStr, 64); err == nil && val > 0 {
+			rateLimitBurst = val
+		}
+	}
+
 	return &Config{
 		Port:           port,
 		Env:            env,
@@ -89,6 +107,8 @@ func Load() *Config {
 		JWTSecret:      jwtSecret,
 		JWTExpiresIn:   jwtExpiresIn,
 		BCryptCost:     bcryptCost,
+		RateLimitRate:  rateLimitRate,
+		RateLimitBurst: rateLimitBurst,
 	}
 }
 

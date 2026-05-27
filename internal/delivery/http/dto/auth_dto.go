@@ -61,13 +61,56 @@ func (r *RegisterRequest) Validate() error {
 	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
 		return errors.New("invalid email address format")
 	}
-	if len(password) < 6 {
-		return errors.New("password must be at least 6 characters long")
+	if err := validatePassword(password); err != nil {
+		return err
 	}
 
 	role := strings.ToLower(strings.TrimSpace(r.Role))
 	if role != "" && role != "operator" && role != "admin" && role != "manager" {
 		return errors.New("role must be either operator, admin, or manager")
+	}
+
+	return nil
+}
+
+// validatePassword checks if a password complies with the strong password policy:
+// - minimum 8 characters
+// - at least 1 uppercase letter
+// - at least 1 lowercase letter
+// - at least 1 number
+// - at least 1 special character
+func validatePassword(password string) error {
+	if len(password) < 8 {
+		return errors.New("password must be at least 8 characters long")
+	}
+
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	specialChars := "!@#$%^&*()-_=+[]{}|;:',.<>/?~`\""
+
+	for _, r := range password {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			hasUpper = true
+		case r >= 'a' && r <= 'z':
+			hasLower = true
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		case strings.ContainsRune(specialChars, r):
+			hasSpecial = true
+		}
+	}
+
+	if !hasUpper {
+		return errors.New("password must contain at least one uppercase letter")
+	}
+	if !hasLower {
+		return errors.New("password must contain at least one lowercase letter")
+	}
+	if !hasDigit {
+		return errors.New("password must contain at least one digit")
+	}
+	if !hasSpecial {
+		return errors.New("password must contain at least one special character")
 	}
 
 	return nil

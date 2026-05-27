@@ -22,6 +22,7 @@ func NewRouter(
 	incidentHandler *handler.IncidentHandler,
 	authHandler *handler.AuthHandler,
 	authMiddleware func(http.Handler) http.Handler,
+	rateLimiterMiddleware func(http.Handler) http.Handler,
 	logger *slog.Logger,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -48,9 +49,12 @@ func NewRouter(
 	r.Route("/api/"+cfg.APIVersion, func(r chi.Router) {
 		r.Get("/health", handler.HealthHandler)
 
-		// Public Auth Routes
-		r.Post("/auth/register", authHandler.Register)
-		r.Post("/auth/login", authHandler.Login)
+		// Public Auth Routes (guarded by client IP rate limiting)
+		r.Route("/auth", func(r chi.Router) {
+			r.Use(rateLimiterMiddleware)
+			r.Post("/register", authHandler.Register)
+			r.Post("/login", authHandler.Login)
+		})
 
 		// Protected Route Group
 		r.Group(func(r chi.Router) {

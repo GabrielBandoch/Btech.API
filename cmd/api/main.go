@@ -75,9 +75,10 @@ func main() {
 
 	// Middlewares
 	authMiddleware := middleware.AuthMiddleware(authUseCase)
+	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRate, cfg.RateLimitBurst)
 
 	// 5. Setup Router
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, authMiddleware, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, authMiddleware, rateLimiter.Limit, log)
 
 	// 6. Setup Server
 	serverAddr := ":" + cfg.Port
