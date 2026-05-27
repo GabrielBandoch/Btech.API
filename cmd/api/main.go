@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,84 +11,77 @@ import (
 	"time"
 
 	"github.com/btech/fleetcontrol-api/internal/config"
-	"github.com/btech/fleetcontrol-api/internal/handler"
-	"github.com/btech/fleetcontrol-api/internal/repository"
+	delivery "github.com/btech/fleetcontrol-api/internal/delivery/http"
+	"github.com/btech/fleetcontrol-api/internal/delivery/http/handler"
+	"github.com/btech/fleetcontrol-api/internal/platform/logger"
+	"github.com/btech/fleetcontrol-api/internal/repository/memory"
+	"github.com/btech/fleetcontrol-api/internal/usecase"
 )
 
 func main() {
-	log.Println("Starting FleetControl API...")
+	// 1. Load configuration
+	cfg := config.Load()
 
-	// Load configuration
-	cfg := config.LoadConfig()
+	// 2. Initialize structured logging (slog) using platform/logger
+	log := logger.New(cfg.Env)
+	slog.SetDefault(log)
 
-	// Initialize repository and handlers
-	repo := repository.NewRepository()
-	h := handler.NewHandler(repo)
+	log.Info("Starting BTech.API...", slog.String("env", cfg.Env), slog.String("port", cfg.Port))
 
-	// Create a new ServeMux using Go 1.22+ routing features
-	mux := http.NewServeMux()
+	// 3. Dependency Injection
+	driverRepo := memory.NewMemoryDriverRepository()
+	driverUseCase := usecase.NewDriverUseCase(driverRepo)
+	driverHandler := handler.NewDriverHandler(driverUseCase)
 
-	// Register routes with CORS middleware
-	mux.HandleFunc("GET /api/trips", h.EnableCORS(h.GetTrips))
-	mux.HandleFunc("GET /api/trips/{id}", h.EnableCORS(h.GetTripByID))
-	mux.HandleFunc("PUT /api/trips/{id}", h.EnableCORS(h.UpdateTrip))
-	mux.HandleFunc("GET /api/drivers", h.EnableCORS(h.GetDrivers))
-	mux.HandleFunc("POST /api/drivers", h.EnableCORS(h.CreateDriver))
-	mux.HandleFunc("GET /api/incidents", h.EnableCORS(h.GetIncidents))
-	mux.HandleFunc("PUT /api/incidents/{id}", h.EnableCORS(h.UpdateIncident))
+	// 4. Setup Router
+	router := delivery.NewRouter(cfg, driverHandler, log)
 
-	// Options preflight fallback for non-matched methods or route-level options
-	mux.HandleFunc("OPTIONS /", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.WriteHeader(http.StatusOK)
-	})
-
-	// Setup Server
+	// 5. Setup Server
 	serverAddr := ":" + cfg.Port
 	srv := &http.Server{
 		Addr:         serverAddr,
-		Handler:      mux,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Handler:      router,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	// Channel to listen for errors during startup
 	serverErrors := make(chan error, 1)
 
-	// Start the server in a goroutine
+	// Start server in a goroutine
 	go func() {
-		log.Printf("Server listening on %s in %s mode\n", serverAddr, cfg.Env)
+		log.Info("Server is listening", slog.String("addr", serverAddr))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErrors <- err
 		}
 	}()
 
-	// Channel to listen for interrupt signals to perform graceful shutdown
+	// Graceful shutdown channel
 	shutdownChannel := make(chan os.Signal, 1)
 	signal.Notify(shutdownChannel, os.Interrupt, syscall.SIGTERM)
 
-	// Block until a signal or server startup error occurs
+	// Block until signal or startup error
 	select {
 	case err := <-serverErrors:
-		log.Fatalf("Fatal error starting server: %v", err)
+		log.Error("Fatal error starting server", slog.String("err", err.Error()))
+		os.Exit(1)
 
 	case sig := <-shutdownChannel:
-		log.Printf("Shutdown signal received: %v. Initiating graceful shutdown...\n", sig)
+		log.Info("Shutdown signal received, initiating graceful shutdown", slog.String("signal", sig.String()))
 
-		// Create a context with timeout for shutdown phase
+		// Context with timeout for shutdown phase
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
 		// Attempt graceful shutdown
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("Server forced to shutdown with error: %v", err)
+			log.Error("Server forced to shutdown with error", slog.String("err", err.Error()))
 			if err := srv.Close(); err != nil {
-				log.Fatalf("Failed to close server: %v", err)
+				log.Error("Failed to close server", slog.String("err", err.Error()))
+				os.Exit(1)
 			}
 		}
-		log.Println("Server gracefully stopped.")
+		log.Info("Server gracefully stopped.")
 	}
 }
