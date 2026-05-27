@@ -14,7 +14,13 @@ import (
 )
 
 // NewRouter configures routes, sets up CORS, and attaches middlewares.
-func NewRouter(cfg *config.Config, driverHandler *handler.DriverHandler, logger *slog.Logger) *chi.Mux {
+func NewRouter(
+	cfg *config.Config,
+	driverHandler *handler.DriverHandler,
+	tripHandler *handler.TripHandler,
+	incidentHandler *handler.IncidentHandler,
+	logger *slog.Logger,
+) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Middlewares
@@ -38,7 +44,21 @@ func NewRouter(cfg *config.Config, driverHandler *handler.DriverHandler, logger 
 	// API Routing Group with version prefix
 	r.Route("/api/"+cfg.APIVersion, func(r chi.Router) {
 		r.Get("/health", handler.HealthHandler)
+
+		// Drivers
 		r.Get("/drivers", driverHandler.GetDrivers)
+		r.Get("/drivers/{id}", driverHandler.GetDriverByID)
+		r.Post("/drivers", driverHandler.CreateDriver)
+
+		// Trips
+		r.Get("/trips", tripHandler.GetTrips)
+		r.Get("/trips/{id}", tripHandler.GetTripByID)
+		r.Put("/trips/{id}", tripHandler.UpdateTrip)
+
+		// Incidents
+		r.Get("/incidents", incidentHandler.GetIncidents)
+		r.Post("/incidents", incidentHandler.CreateIncident)
+		r.Put("/incidents/{id}", incidentHandler.UpdateIncident)
 	})
 
 	return r

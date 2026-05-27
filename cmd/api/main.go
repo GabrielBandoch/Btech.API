@@ -29,12 +29,23 @@ func main() {
 	log.Info("Starting BTech.API...", slog.String("env", cfg.Env), slog.String("port", cfg.Port))
 
 	// 3. Dependency Injection
+	// Repositories
 	driverRepo := memory.NewMemoryDriverRepository()
+	tripRepo := memory.NewMemoryTripRepository()
+	incidentRepo := memory.NewMemoryIncidentRepository()
+
+	// UseCases
 	driverUseCase := usecase.NewDriverUseCase(driverRepo)
+	tripUseCase := usecase.NewTripUseCase(tripRepo)
+	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo)
+
+	// Handlers
 	driverHandler := handler.NewDriverHandler(driverUseCase)
+	tripHandler := handler.NewTripHandler(tripUseCase)
+	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
 
 	// 4. Setup Router
-	router := delivery.NewRouter(cfg, driverHandler, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, log)
 
 	// 5. Setup Server
 	serverAddr := ":" + cfg.Port
