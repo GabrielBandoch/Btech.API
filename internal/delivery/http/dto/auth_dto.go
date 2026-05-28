@@ -13,6 +13,7 @@ type UserResponse struct {
 	Name             string    `json:"name"`
 	Email            string    `json:"email"`
 	Role             string    `json:"role"`
+	Permissions      []string  `json:"permissions"`
 	OrganizationID   string    `json:"organizationId"`
 	OrganizationName string    `json:"organizationName"`
 	OrganizationSlug string    `json:"organizationSlug"`
@@ -44,6 +45,7 @@ func UserToResponse(u *domain.User, orgName, orgSlug string) UserResponse {
 		Name:             u.Name,
 		Email:            u.Email,
 		Role:             u.Role,
+		Permissions:      u.Permissions,
 		OrganizationID:   u.OrganizationID,
 		OrganizationName: orgName,
 		OrganizationSlug: orgSlug,

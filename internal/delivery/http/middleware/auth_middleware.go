@@ -111,3 +111,65 @@ func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
 func RequireAnyRole(allowedRoles ...string) func(http.Handler) http.Handler {
 	return RequireRole(allowedRoles...)
 }
+
+// RequirePermission checks if the authenticated request user has the specific required permission.
+func RequirePermission(requiredPermission string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := UserFromContext(r.Context())
+			if !ok {
+				response.Error(w, http.StatusUnauthorized, "unauthorized: missing user context")
+				return
+			}
+
+			hasPerm := false
+			for _, p := range user.Permissions {
+				if p == requiredPermission {
+					hasPerm = true
+					break
+				}
+			}
+
+			if !hasPerm {
+				response.Error(w, http.StatusForbidden, "forbidden: insufficient permissions")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireAnyPermission checks if the authenticated request user has at least one of the required permissions.
+func RequireAnyPermission(requiredPermissions ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := UserFromContext(r.Context())
+			if !ok {
+				response.Error(w, http.StatusUnauthorized, "unauthorized: missing user context")
+				return
+			}
+
+			hasPerm := false
+			for _, reqPerm := range requiredPermissions {
+				for _, p := range user.Permissions {
+					if p == reqPerm {
+						hasPerm = true
+						break
+					}
+				}
+				if hasPerm {
+					break
+				}
+			}
+
+			if !hasPerm {
+				response.Error(w, http.StatusForbidden, "forbidden: insufficient permissions")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+

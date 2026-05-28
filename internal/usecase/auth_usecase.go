@@ -27,21 +27,23 @@ type AuthUseCase interface {
 }
 
 type authUseCase struct {
-	userRepo     domain.UserRepository
-	orgRepo      domain.OrganizationRepository
-	jwtSecret    string
-	jwtExpiresIn time.Duration
-	bcryptCost   int
+	userRepo       domain.UserRepository
+	orgRepo        domain.OrganizationRepository
+	permissionRepo domain.PermissionRepository
+	jwtSecret      string
+	jwtExpiresIn   time.Duration
+	bcryptCost     int
 }
 
 // NewAuthUseCase instantiates a new AuthUseCase.
-func NewAuthUseCase(userRepo domain.UserRepository, orgRepo domain.OrganizationRepository, jwtSecret string, jwtExpiresIn time.Duration, bcryptCost int) AuthUseCase {
+func NewAuthUseCase(userRepo domain.UserRepository, orgRepo domain.OrganizationRepository, permissionRepo domain.PermissionRepository, jwtSecret string, jwtExpiresIn time.Duration, bcryptCost int) AuthUseCase {
 	return &authUseCase{
-		userRepo:     userRepo,
-		orgRepo:      orgRepo,
-		jwtSecret:    jwtSecret,
-		jwtExpiresIn: jwtExpiresIn,
-		bcryptCost:   bcryptCost,
+		userRepo:       userRepo,
+		orgRepo:        orgRepo,
+		permissionRepo: permissionRepo,
+		jwtSecret:      jwtSecret,
+		jwtExpiresIn:   jwtExpiresIn,
+		bcryptCost:     bcryptCost,
 	}
 }
 
@@ -137,6 +139,12 @@ func (uc *authUseCase) RegisterUser(ctx context.Context, name, email, password, 
 		return nil, ErrInternal
 	}
 
+	perms, err := uc.permissionRepo.GetPermissionsByRole(ctx, role)
+	if err != nil {
+		return nil, ErrInternal
+	}
+	user.Permissions = perms
+
 	return user, nil
 }
 
@@ -177,6 +185,12 @@ func (uc *authUseCase) LoginUser(ctx context.Context, email, password string) (*
 	// Set user active role to organization role
 	user.Role = orgUser.Role
 
+	perms, err := uc.permissionRepo.GetPermissionsByRole(ctx, orgUser.Role)
+	if err != nil {
+		return nil, "", ErrInternal
+	}
+	user.Permissions = perms
+
 	return user, token, nil
 }
 
@@ -206,6 +220,12 @@ func (uc *authUseCase) ValidateToken(ctx context.Context, tokenStr string) (*dom
 	// Set active role and organization ID from claims
 	user.Role = orgUser.Role
 	user.OrganizationID = orgUser.OrganizationID
+
+	perms, err := uc.permissionRepo.GetPermissionsByRole(ctx, orgUser.Role)
+	if err != nil {
+		return nil, nil, ErrInternal
+	}
+	user.Permissions = perms
 
 	return user, claims, nil
 }

@@ -58,6 +58,7 @@ func main() {
 	// Repositories
 	userRepo := postgres.NewPostgresUserRepository(db.Pool)
 	orgRepo := postgres.NewPostgresOrganizationRepository(db.Pool)
+	permissionRepo := postgres.NewPostgresPermissionRepository(db.Pool)
 	driverRepo := memory.NewMemoryDriverRepository()
 	tripRepo := memory.NewMemoryTripRepository()
 	incidentRepo := memory.NewMemoryIncidentRepository()
@@ -72,7 +73,7 @@ func main() {
 	}
 
 	// UseCases
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, cfg.JWTSecret, jwtDuration, cfg.BCryptCost)
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, cfg.JWTSecret, jwtDuration, cfg.BCryptCost)
 	driverUseCase := usecase.NewDriverUseCase(driverRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo)

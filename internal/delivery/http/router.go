@@ -12,6 +12,7 @@ import (
 	"github.com/btech/fleetcontrol-api/internal/config"
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/handler"
 	customMiddleware "github.com/btech/fleetcontrol-api/internal/delivery/http/middleware"
+	"github.com/btech/fleetcontrol-api/internal/domain"
 )
 
 // NewRouter configures routes, sets up CORS, and attaches middlewares.
@@ -66,17 +67,17 @@ func NewRouter(
 			// Drivers
 			r.Get("/drivers", driverHandler.GetDrivers)
 			r.Get("/drivers/{id}", driverHandler.GetDriverByID)
-			r.With(customMiddleware.RequireRole("owner", "admin")).Post("/drivers", driverHandler.CreateDriver)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriversCreate)).Post("/drivers", driverHandler.CreateDriver)
 
 			// Trips
 			r.Get("/trips", tripHandler.GetTrips)
 			r.Get("/trips/{id}", tripHandler.GetTripByID)
-			r.With(customMiddleware.RequireRole("owner", "admin", "operator")).Put("/trips/{id}", tripHandler.UpdateTrip)
+			r.With(customMiddleware.RequirePermission(domain.PermissionTripsUpdate)).Put("/trips/{id}", tripHandler.UpdateTrip)
 
 			// Incidents
 			r.Get("/incidents", incidentHandler.GetIncidents)
-			r.With(customMiddleware.RequireRole("owner", "admin", "operator")).Post("/incidents", incidentHandler.CreateIncident)
-			r.With(customMiddleware.RequireRole("owner", "admin", "operator")).Put("/incidents/{id}", incidentHandler.UpdateIncident)
+			r.With(customMiddleware.RequirePermission(domain.PermissionIncidentsCreate)).Post("/incidents", incidentHandler.CreateIncident)
+			r.With(customMiddleware.RequirePermission(domain.PermissionIncidentsCreate)).Put("/incidents/{id}", incidentHandler.UpdateIncident)
 		})
 	})
 

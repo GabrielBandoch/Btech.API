@@ -99,11 +99,35 @@ func (m *mockOrganizationRepository) GetOrganizationUser(ctx context.Context, or
 	return ou, nil
 }
 
+type mockPermissionRepository struct {
+	permissionsByRole map[string][]string
+}
+
+func newMockPermissionRepository() *mockPermissionRepository {
+	m := &mockPermissionRepository{
+		permissionsByRole: make(map[string][]string),
+	}
+	m.permissionsByRole["owner"] = []string{"drivers:create", "drivers:read", "drivers:delete", "trips:create", "trips:read", "trips:update", "trips:delete", "incidents:create", "incidents:read", "settings:manage"}
+	m.permissionsByRole["admin"] = []string{"drivers:create", "drivers:read", "drivers:delete", "trips:create", "trips:read", "trips:update", "trips:delete", "incidents:create", "incidents:read", "settings:manage"}
+	m.permissionsByRole["operator"] = []string{"drivers:read", "trips:create", "trips:read", "trips:update", "incidents:create", "incidents:read"}
+	m.permissionsByRole["viewer"] = []string{"drivers:read", "trips:read", "incidents:read"}
+	return m
+}
+
+func (m *mockPermissionRepository) GetPermissionsByRole(ctx context.Context, role string) ([]string, error) {
+	perms, ok := m.permissionsByRole[role]
+	if !ok {
+		return []string{}, nil
+	}
+	return perms, nil
+}
+
 func TestAuthUseCase_RegisterUser(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
+	permRepo := newMockPermissionRepository()
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, secret, 1*time.Hour, 4) // cost = 4 for fast tests
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, secret, 1*time.Hour, 4) // cost = 4 for fast tests
 
 	ctx := context.Background()
 
@@ -145,8 +169,9 @@ func TestAuthUseCase_RegisterUser(t *testing.T) {
 func TestAuthUseCase_LoginUser(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
+	permRepo := newMockPermissionRepository()
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, secret, 1*time.Hour, 4)
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, secret, 1*time.Hour, 4)
 
 	ctx := context.Background()
 
@@ -200,8 +225,9 @@ func TestAuthUseCase_LoginUser(t *testing.T) {
 func TestAuthUseCase_ValidateToken(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
+	permRepo := newMockPermissionRepository()
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, secret, 1*time.Second, 4)
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, secret, 1*time.Second, 4)
 
 	ctx := context.Background()
 

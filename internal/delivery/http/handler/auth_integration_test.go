@@ -80,13 +80,14 @@ func TestAuthIntegration(t *testing.T) {
 	// Setup UseCases, Router and Middleware
 	userRepo := postgres.NewPostgresUserRepository(db.Pool)
 	orgRepo := postgres.NewPostgresOrganizationRepository(db.Pool)
+	permissionRepo := postgres.NewPostgresPermissionRepository(db.Pool)
 	driverRepo := memory.NewMemoryDriverRepository()
 	tripRepo := memory.NewMemoryTripRepository()
 	incidentRepo := memory.NewMemoryIncidentRepository()
 
 	// Short-lived JWT expiration (2 seconds) for expiration verification
 	jwtExpires := 2 * time.Second
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, cfg.JWTSecret, jwtExpires, 4) // cost = 4 for fast testing
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, cfg.JWTSecret, jwtExpires, 4) // cost = 4 for fast testing
 	driverUseCase := usecase.NewDriverUseCase(driverRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo)
@@ -294,6 +295,104 @@ func TestAuthIntegration(t *testing.T) {
 			t.Errorf("expected status 401 Unauthorized, got %d", w.Code)
 		}
 	})
+
+	// Test 8: Granular permissions verification
+	t.Run("GranularPermissionsChecks", func(t *testing.T) {
+		// 1. Create a viewer user
+		regPayloadViewer := `{"name":"Viewer User","email":"viewer@btech.com","password":"SecurePassword123!","role":"viewer"}`
+		reqRegViewer := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(regPayloadViewer))
+		reqRegViewer.Header.Set("Content-Type", "application/json")
+		wRegViewer := httptest.NewRecorder()
+		router.ServeHTTP(wRegViewer, reqRegViewer)
+		if wRegViewer.Code != http.StatusCreated {
+			t.Fatalf("failed to register viewer user: %d", wRegViewer.Code)
+		}
+
+		loginPayloadViewer := `{"email":"viewer@btech.com","password":"SecurePassword123!"}`
+		reqLoginViewer := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(loginPayloadViewer))
+		reqLoginViewer.Header.Set("Content-Type", "application/json")
+		wLoginViewer := httptest.NewRecorder()
+		router.ServeHTTP(wLoginViewer, reqLoginViewer)
+		
+		var resViewer apiResponseEnvelope
+		_ = json.Unmarshal(wLoginViewer.Body.Bytes(), &resViewer)
+		var loginDataViewer dto.AuthResponse
+		_ = json.Unmarshal(resViewer.Data, &loginDataViewer)
+		viewerToken := loginDataViewer.Token
+
+		// 2. Create an operator user
+		regPayloadOperator := `{"name":"Operator User","email":"operator@btech.com","password":"SecurePassword123!","role":"operator"}`
+		reqRegOperator := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(regPayloadOperator))
+		reqRegOperator.Header.Set("Content-Type", "application/json")
+		wRegOperator := httptest.NewRecorder()
+		router.ServeHTTP(wRegOperator, reqRegOperator)
+		if wRegOperator.Code != http.StatusCreated {
+			t.Fatalf("failed to register operator user: %d", wRegOperator.Code)
+		}
+
+		loginPayloadOperator := `{"email":"operator@btech.com","password":"SecurePassword123!"}`
+		reqLoginOperator := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(loginPayloadOperator))
+		reqLoginOperator.Header.Set("Content-Type", "application/json")
+		wLoginOperator := httptest.NewRecorder()
+		router.ServeHTTP(wLoginOperator, reqLoginOperator)
+		
+		var resOperator apiResponseEnvelope
+		_ = json.Unmarshal(wLoginOperator.Body.Bytes(), &resOperator)
+		var loginDataOperator dto.AuthResponse
+		_ = json.Unmarshal(resOperator.Data, &loginDataOperator)
+		operatorToken := loginDataOperator.Token
+
+		// Assertions:
+		// A. Viewer tries to POST to /drivers (requires drivers:create) -> must return 403 Forbidden
+		reqPostDriverViewer := httptest.NewRequest(http.MethodPost, "/api/v1/drivers", bytes.NewBufferString(`{}`))
+		reqPostDriverViewer.Header.Set("Authorization", "Bearer "+viewerToken)
+		reqPostDriverViewer.Header.Set("Content-Type", "application/json")
+		wPostDriverViewer := httptest.NewRecorder()
+		router.ServeHTTP(wPostDriverViewer, reqPostDriverViewer)
+		if wPostDriverViewer.Code != http.StatusForbidden {
+			t.Errorf("expected 403 Forbidden for viewer creating driver, got %d", wPostDriverViewer.Code)
+		}
+
+		// B. Operator tries to POST to /drivers (requires drivers:create) -> must return 403 Forbidden
+		reqPostDriverOperator := httptest.NewRequest(http.MethodPost, "/api/v1/drivers", bytes.NewBufferString(`{}`))
+		reqPostDriverOperator.Header.Set("Authorization", "Bearer "+operatorToken)
+		reqPostDriverOperator.Header.Set("Content-Type", "application/json")
+		wPostDriverOperator := httptest.NewRecorder()
+		router.ServeHTTP(wPostDriverOperator, reqPostDriverOperator)
+		if wPostDriverOperator.Code != http.StatusForbidden {
+			t.Errorf("expected 403 Forbidden for operator creating driver, got %d", wPostDriverOperator.Code)
+		}
+
+		// C. Admin (Ricardo) tries to POST to /drivers (requires drivers:create) -> should NOT return 403
+		reqPostDriverAdmin := httptest.NewRequest(http.MethodPost, "/api/v1/drivers", bytes.NewBufferString(`{"name": "New Driver", "role": "operator"}`))
+		reqPostDriverAdmin.Header.Set("Authorization", "Bearer "+jwtToken)
+		reqPostDriverAdmin.Header.Set("Content-Type", "application/json")
+		wPostDriverAdmin := httptest.NewRecorder()
+		router.ServeHTTP(wPostDriverAdmin, reqPostDriverAdmin)
+		if wPostDriverAdmin.Code == http.StatusForbidden {
+			t.Errorf("expected admin to bypass drivers:create check, got 403 Forbidden")
+		}
+
+		// D. Operator tries to PUT to /trips/trip-123 (requires trips:update) -> should NOT return 403 (could be 400 or 404, but NOT 403)
+		reqPutTripOperator := httptest.NewRequest(http.MethodPut, "/api/v1/trips/trip-123", bytes.NewBufferString(`{}`))
+		reqPutTripOperator.Header.Set("Authorization", "Bearer "+operatorToken)
+		reqPutTripOperator.Header.Set("Content-Type", "application/json")
+		wPutTripOperator := httptest.NewRecorder()
+		router.ServeHTTP(wPutTripOperator, reqPutTripOperator)
+		if wPutTripOperator.Code == http.StatusForbidden {
+			t.Errorf("expected operator to bypass trips:update check, got 403 Forbidden")
+		}
+
+		// E. Viewer tries to PUT to /trips/trip-123 (requires trips:update) -> must return 403 Forbidden
+		reqPutTripViewer := httptest.NewRequest(http.MethodPut, "/api/v1/trips/trip-123", bytes.NewBufferString(`{}`))
+		reqPutTripViewer.Header.Set("Authorization", "Bearer "+viewerToken)
+		reqPutTripViewer.Header.Set("Content-Type", "application/json")
+		wPutTripViewer := httptest.NewRecorder()
+		router.ServeHTTP(wPutTripViewer, reqPutTripViewer)
+		if wPutTripViewer.Code != http.StatusForbidden {
+			t.Errorf("expected viewer to get 403 Forbidden for trips:update, got %d", wPutTripViewer.Code)
+		}
+	})
 }
 
 type mockOrgRepoForLimit struct{}
@@ -312,6 +411,11 @@ func (m *mockOrgRepoForLimit) GetOrganizationUser(ctx context.Context, orgID, us
 	return &domain.OrganizationUser{ID: "mock-mapping-id", OrganizationID: orgID, UserID: userID, Role: "operator"}, nil
 }
 
+type mockPermissionRepoForLimit struct{}
+func (m *mockPermissionRepoForLimit) GetPermissionsByRole(ctx context.Context, role string) ([]string, error) {
+	return []string{}, nil
+}
+
 func TestAuthRateLimiting(t *testing.T) {
 	log := logger.New("development")
 	cfg := config.Load()
@@ -319,7 +423,8 @@ func TestAuthRateLimiting(t *testing.T) {
 	// Create mock dependencies to prevent DB connection panics
 	userRepo := &mockUserRepoForLimit{}
 	orgRepo := &mockOrgRepoForLimit{}
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, cfg.JWTSecret, 1*time.Hour, 4)
+	permissionRepo := &mockPermissionRepoForLimit{}
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, cfg.JWTSecret, 1*time.Hour, 4)
 	authHandler := handler.NewAuthHandler(authUseCase)
 	
 	driverRepo := memory.NewMemoryDriverRepository()

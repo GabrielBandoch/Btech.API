@@ -17,6 +17,7 @@ type User struct {
 	Email          string    `json:"email"`
 	PasswordHash   string    `json:"-"`
 	Role           string    `json:"role"` // "owner", "admin", "operator", "viewer"
+	Permissions    []string  `json:"permissions"`
 	OrganizationID string    `json:"organizationId"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
