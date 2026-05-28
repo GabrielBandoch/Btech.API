@@ -13,13 +13,15 @@ type IncidentUseCase interface {
 }
 
 type incidentUseCase struct {
-	repo domain.IncidentRepository
+	repo         domain.IncidentRepository
+	auditUseCase AuditUseCase
 }
 
 // NewIncidentUseCase creates a new instance of IncidentUseCase.
-func NewIncidentUseCase(repo domain.IncidentRepository) IncidentUseCase {
+func NewIncidentUseCase(repo domain.IncidentRepository, auditUseCase AuditUseCase) IncidentUseCase {
 	return &incidentUseCase{
-		repo: repo,
+		repo:         repo,
+		auditUseCase: auditUseCase,
 	}
 }
 
@@ -30,7 +32,19 @@ func (uc *incidentUseCase) GetIncidents(ctx context.Context, orgID string) ([]do
 
 // CreateIncident registers a new incident for the organization.
 func (uc *incidentUseCase) CreateIncident(ctx context.Context, orgID string, incident domain.Incident) (domain.Incident, error) {
-	return uc.repo.Create(ctx, orgID, incident)
+	inc, err := uc.repo.Create(ctx, orgID, incident)
+	if err != nil {
+		return inc, err
+	}
+
+	uc.auditUseCase.Log(ctx, domain.EventIncidentCreate, "incident", &inc.ID, map[string]interface{}{
+		"type":        inc.Type,
+		"severity":    inc.Severity,
+		"location":    inc.Location,
+		"driver_name": inc.DriverName,
+	})
+
+	return inc, nil
 }
 
 // UpdateIncident updates incident attributes within the organization.

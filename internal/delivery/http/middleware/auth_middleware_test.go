@@ -113,3 +113,44 @@ func TestRequireAnyPermission(t *testing.T) {
 		}
 	})
 }
+
+type spyAuditUseCase struct {
+	loggedActions []string
+}
+
+func (s *spyAuditUseCase) Log(ctx context.Context, action string, entityType string, entityID *string, metadata map[string]interface{}) {
+	s.loggedActions = append(s.loggedActions, action)
+}
+
+func (s *spyAuditUseCase) GetLogsByOrganization(ctx context.Context, orgID string, limit, offset int) ([]*domain.AuditLog, error) {
+	return nil, nil
+}
+
+func TestRequirePermission_AuditLog(t *testing.T) {
+	spy := &spyAuditUseCase{}
+	SetAuditUseCase(spy)
+	defer SetAuditUseCase(nil) // Reset after test
+
+	user := &domain.User{
+		ID:          "user-1",
+		Role:        "viewer",
+		Permissions: []string{"drivers:read"},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	ctx := context.WithValue(req.Context(), UserContextKey, user)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	dummyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	RequirePermission("drivers:create")(dummyHandler).ServeHTTP(w, req)
+
+	if len(spy.loggedActions) != 1 {
+		t.Fatalf("expected 1 logged audit action, got %d", len(spy.loggedActions))
+	}
+
+	if spy.loggedActions[0] != domain.EventPermissionDenied {
+		t.Errorf("expected logged action %s, got %s", domain.EventPermissionDenied, spy.loggedActions[0])
+	}
+}
+

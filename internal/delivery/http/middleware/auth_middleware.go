@@ -10,13 +10,20 @@ import (
 	"github.com/btech/fleetcontrol-api/internal/usecase"
 )
 
+var auditUseCase usecase.AuditUseCase
+
+// SetAuditUseCase sets the package-level AuditUseCase instance for logging security events.
+func SetAuditUseCase(uc usecase.AuditUseCase) {
+	auditUseCase = uc
+}
+
 type contextKey string
 
 const (
 	UserContextKey           contextKey = "user"
-	UserIDContextKey         contextKey = "user_id"
-	OrganizationIDContextKey contextKey = "organization_id"
 	RoleContextKey           contextKey = "role"
+	UserIDContextKey                    = domain.UserIDContextKey
+	OrganizationIDContextKey            = domain.OrganizationIDContextKey
 )
 
 // AuthMiddleware creates a JWT authentication middleware that validates access tokens.
@@ -131,6 +138,13 @@ func RequirePermission(requiredPermission string) func(http.Handler) http.Handle
 			}
 
 			if !hasPerm {
+				if auditUseCase != nil {
+					auditUseCase.Log(r.Context(), domain.EventPermissionDenied, "permission", &requiredPermission, map[string]interface{}{
+						"required_permission": requiredPermission,
+						"path":                r.URL.Path,
+						"method":              r.Method,
+					})
+				}
 				response.Error(w, http.StatusForbidden, "forbidden: insufficient permissions")
 				return
 			}
@@ -164,6 +178,14 @@ func RequireAnyPermission(requiredPermissions ...string) func(http.Handler) http
 			}
 
 			if !hasPerm {
+				if auditUseCase != nil {
+					requiredStr := strings.Join(requiredPermissions, ", ")
+					auditUseCase.Log(r.Context(), domain.EventPermissionDenied, "permission", &requiredStr, map[string]interface{}{
+						"required_permissions": requiredPermissions,
+						"path":                 r.URL.Path,
+						"method":               r.Method,
+					})
+				}
 				response.Error(w, http.StatusForbidden, "forbidden: insufficient permissions")
 				return
 			}

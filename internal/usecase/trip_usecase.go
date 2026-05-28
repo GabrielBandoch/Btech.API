@@ -13,13 +13,15 @@ type TripUseCase interface {
 }
 
 type tripUseCase struct {
-	repo domain.TripRepository
+	repo         domain.TripRepository
+	auditUseCase AuditUseCase
 }
 
-// NewTripUseCase creates a new instance of TripUseCase with injected repository.
-func NewTripUseCase(repo domain.TripRepository) TripUseCase {
+// NewTripUseCase creates a new instance of TripUseCase with injected repository and audit usecase.
+func NewTripUseCase(repo domain.TripRepository, auditUseCase AuditUseCase) TripUseCase {
 	return &tripUseCase{
-		repo: repo,
+		repo:         repo,
+		auditUseCase: auditUseCase,
 	}
 }
 
@@ -35,5 +37,17 @@ func (uc *tripUseCase) GetTripByID(ctx context.Context, orgID string, id string)
 
 // UpdateTrip updates trip attributes within the organization.
 func (uc *tripUseCase) UpdateTrip(ctx context.Context, orgID string, id string, trip domain.Trip) (domain.Trip, error) {
-	return uc.repo.Update(ctx, orgID, id, trip)
+	t, err := uc.repo.Update(ctx, orgID, id, trip)
+	if err != nil {
+		return t, err
+	}
+
+	uc.auditUseCase.Log(ctx, domain.EventTripUpdate, "trip", &t.ID, map[string]interface{}{
+		"status":          t.Status,
+		"driver_name":     t.DriverName,
+		"vehicle_placa":   t.VehiclePlaca,
+		"estimated_time":  t.EstimatedTime,
+	})
+
+	return t, nil
 }

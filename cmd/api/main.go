@@ -59,6 +59,7 @@ func main() {
 	userRepo := postgres.NewPostgresUserRepository(db.Pool)
 	orgRepo := postgres.NewPostgresOrganizationRepository(db.Pool)
 	permissionRepo := postgres.NewPostgresPermissionRepository(db.Pool)
+	auditLogRepo := postgres.NewPostgresAuditLogRepository(db.Pool)
 	driverRepo := memory.NewMemoryDriverRepository()
 	tripRepo := memory.NewMemoryTripRepository()
 	incidentRepo := memory.NewMemoryIncidentRepository()
@@ -73,10 +74,11 @@ func main() {
 	}
 
 	// UseCases
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, cfg.JWTSecret, jwtDuration, cfg.BCryptCost)
-	driverUseCase := usecase.NewDriverUseCase(driverRepo)
-	tripUseCase := usecase.NewTripUseCase(tripRepo)
-	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo)
+	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, log)
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, auditUseCase, cfg.JWTSecret, jwtDuration, cfg.BCryptCost)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, auditUseCase)
+	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
+	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authUseCase)
@@ -85,6 +87,7 @@ func main() {
 	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
 
 	// Middlewares
+	middleware.SetAuditUseCase(auditUseCase)
 	authMiddleware := middleware.AuthMiddleware(authUseCase)
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRate, cfg.RateLimitBurst)
 

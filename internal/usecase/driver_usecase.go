@@ -13,13 +13,15 @@ type DriverUseCase interface {
 }
 
 type driverUseCase struct {
-	repo domain.DriverRepository
+	repo         domain.DriverRepository
+	auditUseCase AuditUseCase
 }
 
-// NewDriverUseCase creates a new instance of DriverUseCase with injected repository.
-func NewDriverUseCase(repo domain.DriverRepository) DriverUseCase {
+// NewDriverUseCase creates a new instance of DriverUseCase with injected repository and audit usecase.
+func NewDriverUseCase(repo domain.DriverRepository, auditUseCase AuditUseCase) DriverUseCase {
 	return &driverUseCase{
-		repo: repo,
+		repo:         repo,
+		auditUseCase: auditUseCase,
 	}
 }
 
@@ -35,5 +37,15 @@ func (uc *driverUseCase) GetDriverByID(ctx context.Context, orgID string, id str
 
 // CreateDriver registers a new driver for the organization.
 func (uc *driverUseCase) CreateDriver(ctx context.Context, orgID string, driver domain.Driver) (domain.Driver, error) {
-	return uc.repo.Create(ctx, orgID, driver)
+	d, err := uc.repo.Create(ctx, orgID, driver)
+	if err != nil {
+		return d, err
+	}
+
+	uc.auditUseCase.Log(ctx, domain.EventDriverCreate, "driver", &d.ID, map[string]interface{}{
+		"driver_name": d.Name,
+		"license":     d.LicenseExpiry,
+	})
+
+	return d, nil
 }

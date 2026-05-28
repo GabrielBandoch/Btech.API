@@ -30,17 +30,19 @@ type authUseCase struct {
 	userRepo       domain.UserRepository
 	orgRepo        domain.OrganizationRepository
 	permissionRepo domain.PermissionRepository
+	auditUseCase   AuditUseCase
 	jwtSecret      string
 	jwtExpiresIn   time.Duration
 	bcryptCost     int
 }
 
 // NewAuthUseCase instantiates a new AuthUseCase.
-func NewAuthUseCase(userRepo domain.UserRepository, orgRepo domain.OrganizationRepository, permissionRepo domain.PermissionRepository, jwtSecret string, jwtExpiresIn time.Duration, bcryptCost int) AuthUseCase {
+func NewAuthUseCase(userRepo domain.UserRepository, orgRepo domain.OrganizationRepository, permissionRepo domain.PermissionRepository, auditUseCase AuditUseCase, jwtSecret string, jwtExpiresIn time.Duration, bcryptCost int) AuthUseCase {
 	return &authUseCase{
 		userRepo:       userRepo,
 		orgRepo:        orgRepo,
 		permissionRepo: permissionRepo,
+		auditUseCase:   auditUseCase,
 		jwtSecret:      jwtSecret,
 		jwtExpiresIn:   jwtExpiresIn,
 		bcryptCost:     bcryptCost,
@@ -145,6 +147,13 @@ func (uc *authUseCase) RegisterUser(ctx context.Context, name, email, password, 
 	}
 	user.Permissions = perms
 
+	// Log user registration event
+	uc.auditUseCase.Log(ctx, domain.EventUserRegister, "user", &user.ID, map[string]interface{}{
+		"email": user.Email,
+		"name":  user.Name,
+		"role":  user.Role,
+	})
+
 	return user, nil
 }
 
@@ -190,6 +199,12 @@ func (uc *authUseCase) LoginUser(ctx context.Context, email, password string) (*
 		return nil, "", ErrInternal
 	}
 	user.Permissions = perms
+
+	// Log user login event
+	uc.auditUseCase.Log(ctx, domain.EventUserLogin, "user", &user.ID, map[string]interface{}{
+		"email":           user.Email,
+		"organization_id": user.OrganizationID,
+	})
 
 	return user, token, nil
 }

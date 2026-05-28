@@ -31,6 +31,7 @@ func NewRouter(
 	// Middlewares
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	r.Use(customMiddleware.AuditContextMiddleware())
 	r.Use(customMiddleware.StructuredLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(time.Duration(cfg.TimeoutSeconds) * time.Second))

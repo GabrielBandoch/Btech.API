@@ -122,12 +122,19 @@ func (m *mockPermissionRepository) GetPermissionsByRole(ctx context.Context, rol
 	return perms, nil
 }
 
+type mockAuditUseCase struct{}
+func (m *mockAuditUseCase) Log(ctx context.Context, action string, entityType string, entityID *string, metadata map[string]interface{}) {}
+func (m *mockAuditUseCase) GetLogsByOrganization(ctx context.Context, orgID string, limit, offset int) ([]*domain.AuditLog, error) {
+	return []*domain.AuditLog{}, nil
+}
+
 func TestAuthUseCase_RegisterUser(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
 	permRepo := newMockPermissionRepository()
+	auditUC := &mockAuditUseCase{}
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, permRepo, secret, 1*time.Hour, 4) // cost = 4 for fast tests
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, auditUC, secret, 1*time.Hour, 4) // cost = 4 for fast tests
 
 	ctx := context.Background()
 
@@ -170,8 +177,9 @@ func TestAuthUseCase_LoginUser(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
 	permRepo := newMockPermissionRepository()
+	auditUC := &mockAuditUseCase{}
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, permRepo, secret, 1*time.Hour, 4)
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, auditUC, secret, 1*time.Hour, 4)
 
 	ctx := context.Background()
 
@@ -226,8 +234,9 @@ func TestAuthUseCase_ValidateToken(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
 	permRepo := newMockPermissionRepository()
+	auditUC := &mockAuditUseCase{}
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, permRepo, secret, 1*time.Second, 4)
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, auditUC, secret, 1*time.Second, 4)
 
 	ctx := context.Background()
 

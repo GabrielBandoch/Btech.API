@@ -81,22 +81,25 @@ func TestAuthIntegration(t *testing.T) {
 	userRepo := postgres.NewPostgresUserRepository(db.Pool)
 	orgRepo := postgres.NewPostgresOrganizationRepository(db.Pool)
 	permissionRepo := postgres.NewPostgresPermissionRepository(db.Pool)
+	auditLogRepo := postgres.NewPostgresAuditLogRepository(db.Pool)
 	driverRepo := memory.NewMemoryDriverRepository()
 	tripRepo := memory.NewMemoryTripRepository()
 	incidentRepo := memory.NewMemoryIncidentRepository()
 
 	// Short-lived JWT expiration (2 seconds) for expiration verification
 	jwtExpires := 2 * time.Second
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, cfg.JWTSecret, jwtExpires, 4) // cost = 4 for fast testing
-	driverUseCase := usecase.NewDriverUseCase(driverRepo)
-	tripUseCase := usecase.NewTripUseCase(tripRepo)
-	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo)
+	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, log)
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, auditUseCase, cfg.JWTSecret, jwtExpires, 4) // cost = 4 for fast testing
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, auditUseCase)
+	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
+	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 
 	authHandler := handler.NewAuthHandler(authUseCase)
 	driverHandler := handler.NewDriverHandler(driverUseCase)
 	tripHandler := handler.NewTripHandler(tripUseCase)
 	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
 
+	middleware.SetAuditUseCase(auditUseCase)
 	authMiddleware := middleware.AuthMiddleware(authUseCase)
 	
 	// Large capacity rate limiter to prevent rate limit blocks during main test suite
@@ -393,6 +396,106 @@ func TestAuthIntegration(t *testing.T) {
 			t.Errorf("expected viewer to get 403 Forbidden for trips:update, got %d", wPutTripViewer.Code)
 		}
 	})
+
+	// Test 9: Audit log persistence and multi-tenant isolation
+	t.Run("AuditLogsPersistence", func(t *testing.T) {
+		// Clear audit logs first to have clean stats
+		_, err := db.Pool.Exec(context.Background(), "TRUNCATE TABLE audit_logs CASCADE")
+		if err != nil {
+			t.Fatalf("failed to truncate audit_logs table: %v", err)
+		}
+
+		// Register a new user (triggers EventUserRegister)
+		regPayload := `{"name":"Audited User","email":"audited@btech.com","password":"SecurePassword123!","role":"operator"}`
+		reqReg := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewBufferString(regPayload))
+		reqReg.Header.Set("Content-Type", "application/json")
+		reqReg.Header.Set("User-Agent", "Go-Integration-Test-UA")
+		reqReg.Header.Set("X-Real-IP", "1.2.3.4")
+		wReg := httptest.NewRecorder()
+		router.ServeHTTP(wReg, reqReg)
+		if wReg.Code != http.StatusCreated {
+			t.Fatalf("failed to register user for audit: %d", wReg.Code)
+		}
+
+		// Login the user (triggers EventUserLogin)
+		loginPayload := `{"email":"audited@btech.com","password":"SecurePassword123!"}`
+		reqLogin := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(loginPayload))
+		reqLogin.Header.Set("Content-Type", "application/json")
+		reqLogin.Header.Set("User-Agent", "Go-Integration-Test-UA")
+		reqLogin.Header.Set("X-Real-IP", "1.2.3.4")
+		wLogin := httptest.NewRecorder()
+		router.ServeHTTP(wLogin, reqLogin)
+		if wLogin.Code != http.StatusOK {
+			t.Fatalf("failed to login user for audit: %d", wLogin.Code)
+		}
+
+		var res apiResponseEnvelope
+		_ = json.Unmarshal(wLogin.Body.Bytes(), &res)
+		var loginData dto.AuthResponse
+		_ = json.Unmarshal(res.Data, &loginData)
+		token := loginData.Token
+		orgID := loginData.User.OrganizationID
+
+		// Trigger permission denied (triggers EventPermissionDenied)
+		reqPostDriver := httptest.NewRequest(http.MethodPost, "/api/v1/drivers", bytes.NewBufferString(`{}`))
+		reqPostDriver.Header.Set("Authorization", "Bearer "+token)
+		reqPostDriver.Header.Set("Content-Type", "application/json")
+		reqPostDriver.Header.Set("User-Agent", "Go-Integration-Test-UA")
+		reqPostDriver.Header.Set("X-Real-IP", "1.2.3.4")
+		wPostDriver := httptest.NewRecorder()
+		router.ServeHTTP(wPostDriver, reqPostDriver)
+		if wPostDriver.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 Forbidden, got %d", wPostDriver.Code)
+		}
+
+		// Wait briefly for background worker queue to write to database
+		time.Sleep(100 * time.Millisecond)
+
+		// Check database directly
+		var count int
+		err = db.Pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM audit_logs").Scan(&count)
+		if err != nil {
+			t.Fatalf("failed to query audit log count: %v", err)
+		}
+
+		if count < 3 {
+			t.Errorf("expected at least 3 audit logs in database, got %d", count)
+		}
+
+		// Verify fields of user.login and user.register
+		var action string
+		var ipAddress string
+		var userAgent *string
+		err = db.Pool.QueryRow(context.Background(), 
+			"SELECT action, ip_address, user_agent FROM audit_logs WHERE action = $1 LIMIT 1", 
+			domain.EventUserLogin).Scan(&action, &ipAddress, &userAgent)
+		if err != nil {
+			t.Fatalf("failed to fetch user.login audit log: %v", err)
+		}
+
+		if ipAddress != "1.2.3.4" {
+			t.Errorf("expected IP Address '1.2.3.4', got '%s'", ipAddress)
+		}
+		if userAgent == nil || *userAgent != "Go-Integration-Test-UA" {
+			t.Errorf("expected User Agent 'Go-Integration-Test-UA', got '%v'", userAgent)
+		}
+
+		// Verify get logs endpoint or organization query isolation
+		logs, err := auditUseCase.GetLogsByOrganization(context.Background(), orgID, 10, 0)
+		if err != nil {
+			t.Fatalf("failed to get logs by organization: %v", err)
+		}
+
+		if len(logs) == 0 {
+			t.Error("expected to find at least one audit log for organization")
+		}
+
+		for _, l := range logs {
+			if l.OrganizationID == nil || *l.OrganizationID != orgID {
+				t.Errorf("expected audit log organization ID to be %s, got %v", orgID, l.OrganizationID)
+			}
+		}
+	})
 }
 
 type mockOrgRepoForLimit struct{}
@@ -411,6 +514,12 @@ func (m *mockOrgRepoForLimit) GetOrganizationUser(ctx context.Context, orgID, us
 	return &domain.OrganizationUser{ID: "mock-mapping-id", OrganizationID: orgID, UserID: userID, Role: "operator"}, nil
 }
 
+type mockAuditUseCaseForLimit struct{}
+func (m *mockAuditUseCaseForLimit) Log(ctx context.Context, action string, entityType string, entityID *string, metadata map[string]interface{}) {}
+func (m *mockAuditUseCaseForLimit) GetLogsByOrganization(ctx context.Context, orgID string, limit, offset int) ([]*domain.AuditLog, error) {
+	return []*domain.AuditLog{}, nil
+}
+
 type mockPermissionRepoForLimit struct{}
 func (m *mockPermissionRepoForLimit) GetPermissionsByRole(ctx context.Context, role string) ([]string, error) {
 	return []string{}, nil
@@ -424,15 +533,16 @@ func TestAuthRateLimiting(t *testing.T) {
 	userRepo := &mockUserRepoForLimit{}
 	orgRepo := &mockOrgRepoForLimit{}
 	permissionRepo := &mockPermissionRepoForLimit{}
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, cfg.JWTSecret, 1*time.Hour, 4)
+	auditUseCase := &mockAuditUseCaseForLimit{}
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, auditUseCase, cfg.JWTSecret, 1*time.Hour, 4)
 	authHandler := handler.NewAuthHandler(authUseCase)
 	
 	driverRepo := memory.NewMemoryDriverRepository()
 	tripRepo := memory.NewMemoryTripRepository()
 	incidentRepo := memory.NewMemoryIncidentRepository()
-	driverUseCase := usecase.NewDriverUseCase(driverRepo)
-	tripUseCase := usecase.NewTripUseCase(tripRepo)
-	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, auditUseCase)
+	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
+	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 	driverHandler := handler.NewDriverHandler(driverUseCase)
 	tripHandler := handler.NewTripHandler(tripUseCase)
 	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
