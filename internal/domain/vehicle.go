@@ -24,4 +24,5 @@ type VehicleRepository interface {
 	GetAll(ctx context.Context, orgID string) ([]Vehicle, error)
 	GetByID(ctx context.Context, orgID string, id string) (Vehicle, error)
 	Create(ctx context.Context, orgID string, vehicle Vehicle) (Vehicle, error)
+	Update(ctx context.Context, orgID string, id string, vehicle Vehicle) (Vehicle, error)
 }

@@ -28,6 +28,22 @@ const (
 	EventVehicleCreate      = "vehicle.create"
 	EventVehicleUpdate      = "vehicle.update"
 	EventVehicleDelete      = "vehicle.delete"
+
+	EventMaintenanceSupplierCreate = "maintenance_supplier.create"
+	EventMaintenanceSupplierUpdate = "maintenance_supplier.update"
+	EventMaintenanceSupplierDelete = "maintenance_supplier.delete"
+
+	EventMaintenancePlanCreate = "maintenance_plan.create"
+	EventMaintenancePlanUpdate = "maintenance_plan.update"
+	EventMaintenancePlanDelete = "maintenance_plan.delete"
+
+	EventMaintenanceCreate   = "maintenance.create"
+	EventMaintenanceUpdate   = "maintenance.update"
+	EventMaintenanceDelete   = "maintenance.delete"
+	EventMaintenanceComplete = "maintenance.complete"
+
+	EventMaintenanceAlertCreated  = "maintenance.alert.created"
+	EventMaintenanceAlertResolved = "maintenance.alert.resolved"
 )
 
 type ContextKey string

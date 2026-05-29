@@ -400,6 +400,154 @@ func SeedDevelopmentDatabase(
 		}
 	}
 
+	// 10. Seed Maintenance Suppliers
+	suppliers := []struct {
+		ID      string
+		Name    string
+		Phone   string
+		Email   string
+		Address string
+	}{
+		{ID: "MS-001", Name: "Oficina Mecânica TruckCenter", Phone: "(11) 99999-8888", Email: "contato@truckcenter.com", Address: "Av. Marginal Pinheiros, 1200 - São Paulo, SP"},
+		{ID: "MS-002", Name: "AutoPeças e Serviços Diesel", Phone: "(11) 98888-7777", Email: "servicos@dieselserv.com", Address: "Rua das Oficinas, 450 - Guarulhos, SP"},
+	}
+
+	for _, s := range suppliers {
+		_, err = pool.Exec(ctx, `
+			INSERT INTO maintenance_suppliers (
+				id, organization_id, name, phone, email, address, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+			ON CONFLICT (id) DO NOTHING`,
+			s.ID, orgID, s.Name, s.Phone, s.Email, s.Address, now,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to seed maintenance supplier %s: %w", s.ID, err)
+		}
+	}
+
+	// 11. Seed Maintenance Plans
+	plans := []struct {
+		ID             string
+		VehicleID      string
+		Name           string
+		IntervalKM     int
+		IntervalMonths int
+		LastKM         int
+		LastDate       time.Time
+		NextKM         int
+		NextDate       time.Time
+	}{
+		{
+			ID: "MP-001", VehicleID: "VH-001", Name: "Troca de Óleo e Filtros",
+			IntervalKM: 10000, IntervalMonths: 6,
+			LastKM: 120000, LastDate: now.AddDate(0, -3, 0),
+			NextKM: 130000, NextDate: now.AddDate(0, 3, 0),
+		},
+		{
+			ID: "MP-002", VehicleID: "VH-002", Name: "Revisão Geral Preventiva",
+			IntervalKM: 40000, IntervalMonths: 12,
+			LastKM: 80000, LastDate: now.AddDate(0, -11, 15),
+			NextKM: 120000, NextDate: now.AddDate(0, 0, 15), // Close to next date (within 30 days)
+		},
+		{
+			ID: "MP-003", VehicleID: "VH-003", Name: "Manutenção de Freios",
+			IntervalKM: 20000, IntervalMonths: 6,
+			LastKM: 180000, LastDate: now.AddDate(0, -5, 0),
+			NextKM: 200000, NextDate: now.AddDate(0, 1, 0),
+		},
+	}
+
+	for _, p := range plans {
+		_, err = pool.Exec(ctx, `
+			INSERT INTO maintenance_plans (
+				id, organization_id, vehicle_id, name, interval_km, interval_months,
+				last_maintenance_km, last_maintenance_date, next_due_km, next_due_date, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+			ON CONFLICT (id) DO NOTHING`,
+			p.ID, orgID, p.VehicleID, p.Name, p.IntervalKM, p.IntervalMonths,
+			p.LastKM, p.LastDate, p.NextKM, p.NextDate, now,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to seed maintenance plan %s: %w", p.ID, err)
+		}
+	}
+
+	// 12. Seed Maintenances
+	maintenances := []struct {
+		ID                string
+		VehicleID         string
+		PlanID            *string
+		SupplierID        *string
+		Type              string
+		Priority          string
+		Status            string
+		Date              time.Time
+		OdometerAtService int
+		DowntimeHours     float64
+		Cost              float64
+		Description       string
+		Attachments       []string
+	}{
+		{
+			ID: "MNT-001", VehicleID: "VH-001", PlanID: ptrString("MP-001"), SupplierID: ptrString("MS-001"),
+			Type: "preventive", Priority: "medium", Status: "completed",
+			Date: now.AddDate(0, -3, 0), OdometerAtService: 120000, DowntimeHours: 4.5, Cost: 1250.00,
+			Description: "Troca de óleo do motor, filtro de óleo e filtro de combustível efetuados com sucesso.",
+			Attachments: []string{"https://example.com/invoice-001.pdf", "https://example.com/photo-001.jpg"},
+		},
+		{
+			ID: "MNT-002", VehicleID: "VH-003", PlanID: nil, SupplierID: ptrString("MS-002"),
+			Type: "corrective", Priority: "critical", Status: "in_progress",
+			Date: now, OdometerAtService: 182000, DowntimeHours: 24.0, Cost: 4800.00,
+			Description: "Quebra inesperada da suspensão dianteira durante viagem. Veículo guinchado até a oficina.",
+			Attachments: []string{"https://example.com/service-order-002.pdf"},
+		},
+		{
+			ID: "MNT-003", VehicleID: "VH-002", PlanID: ptrString("MP-002"), SupplierID: ptrString("MS-001"),
+			Type: "preventive", Priority: "high", Status: "scheduled",
+			Date: now.AddDate(0, 0, 15), OdometerAtService: 120000, DowntimeHours: 8.0, Cost: 3500.00,
+			Description: "Agendamento de revisão geral de 120.000km conforme plano preventivo do veículo.",
+			Attachments: []string{},
+		},
+	}
+
+	for _, m := range maintenances {
+		var planIDVal, supplierIDVal interface{}
+		if m.PlanID != nil {
+			planIDVal = *m.PlanID
+		}
+		if m.SupplierID != nil {
+			supplierIDVal = *m.SupplierID
+		}
+
+		_, err = pool.Exec(ctx, `
+			INSERT INTO maintenances (
+				id, organization_id, vehicle_id, maintenance_plan_id, supplier_id,
+				type, priority, status, date, odometer_at_service, downtime_hours, cost, description, attachments, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)
+			ON CONFLICT (id) DO NOTHING`,
+			m.ID, orgID, m.VehicleID, planIDVal, supplierIDVal,
+			m.Type, m.Priority, m.Status, m.Date, m.OdometerAtService, m.DowntimeHours, m.Cost, m.Description, m.Attachments, now,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to seed maintenance %s: %w", m.ID, err)
+		}
+	}
+
+	// 13. Seed Maintenance Alerts (VH-002 is close to date limit for MP-002)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO maintenance_alerts (
+			id, organization_id, vehicle_id, maintenance_plan_id, type, title, message, status, created_at, updated_at
+		) VALUES ($1, $2, 'VH-002', 'MP-002', 'date_due', 'Revisão Geral Preventiva Próxima do Vencimento', 
+		          'O veículo VH-002 está próximo da data limite prevista para a revisão Geral Preventiva (vence em menos de 30 dias).',
+		          'active', $3, $3)
+		ON CONFLICT (id) DO NOTHING`,
+		"MNT-ALT-001", orgID, now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to seed maintenance alert: %w", err)
+	}
+
 	logger.Info("Development database seeding completed successfully.")
 	return nil
 }

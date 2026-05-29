@@ -134,3 +134,81 @@ func (r *PostgresVehicleRepository) Create(ctx context.Context, orgID string, ve
 
 	return vehicle, nil
 }
+
+func (r *PostgresVehicleRepository) Update(ctx context.Context, orgID string, id string, vehicle domain.Vehicle) (domain.Vehicle, error) {
+	var existing domain.Vehicle
+	queryCheck := `SELECT id, organization_id, placa, brand, model, year, type, mileage, status, 
+	                      created_at, updated_at, deleted_at 
+	               FROM vehicles 
+	               WHERE organization_id = $1 AND id = $2 AND deleted_at IS NULL`
+
+	err := r.pool.QueryRow(ctx, queryCheck, orgID, id).Scan(
+		&existing.ID,
+		&existing.OrganizationID,
+		&existing.Placa,
+		&existing.Brand,
+		&existing.Model,
+		&existing.Year,
+		&existing.Type,
+		&existing.Mileage,
+		&existing.Status,
+		&existing.CreatedAt,
+		&existing.UpdatedAt,
+		&existing.DeletedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Vehicle{}, fmt.Errorf("vehicle not found")
+		}
+		return domain.Vehicle{}, fmt.Errorf("database query error: %w", err)
+	}
+
+	// Apply updates
+	if vehicle.Placa != "" {
+		existing.Placa = vehicle.Placa
+	}
+	if vehicle.Brand != "" {
+		existing.Brand = vehicle.Brand
+	}
+	if vehicle.Model != "" {
+		existing.Model = vehicle.Model
+	}
+	if vehicle.Year != 0 {
+		existing.Year = vehicle.Year
+	}
+	if vehicle.Type != "" {
+		existing.Type = vehicle.Type
+	}
+	if vehicle.Mileage != 0 {
+		existing.Mileage = vehicle.Mileage
+	}
+	if vehicle.Status != "" {
+		existing.Status = vehicle.Status
+	}
+	existing.UpdatedAt = time.Now()
+
+	updateQuery := `UPDATE vehicles 
+	                SET placa = $1, brand = $2, model = $3, year = $4, type = $5, mileage = $6, status = $7, updated_at = $8 
+	                WHERE organization_id = $9 AND id = $10`
+
+	_, err = r.pool.Exec(ctx, updateQuery,
+		existing.Placa,
+		existing.Brand,
+		existing.Model,
+		existing.Year,
+		existing.Type,
+		existing.Mileage,
+		existing.Status,
+		existing.UpdatedAt,
+		orgID,
+		id,
+	)
+
+	if err != nil {
+		return domain.Vehicle{}, fmt.Errorf("failed to update vehicle in db: %w", err)
+	}
+
+	return existing, nil
+}
+

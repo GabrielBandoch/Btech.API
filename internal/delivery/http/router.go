@@ -24,6 +24,7 @@ func NewRouter(
 	incidentHandler *handler.IncidentHandler,
 	authHandler *handler.AuthHandler,
 	vehicleHandler *handler.VehicleHandler,
+	maintenanceHandler *handler.MaintenanceHandler,
 	authMiddleware func(http.Handler) http.Handler,
 	rateLimiterMiddleware func(http.Handler) http.Handler,
 	entitlementUseCase usecase.EntitlementUseCase,
@@ -91,6 +92,36 @@ func NewRouter(
 			r.With(customMiddleware.RequirePermission(domain.PermissionVehiclesRead)).Get("/vehicles", vehicleHandler.GetVehicles)
 			r.With(customMiddleware.RequirePermission(domain.PermissionVehiclesRead)).Get("/vehicles/{id}", vehicleHandler.GetVehicleByID)
 			r.With(customMiddleware.RequirePermission(domain.PermissionVehiclesCreate)).Post("/vehicles", vehicleHandler.CreateVehicle)
+			r.With(customMiddleware.RequirePermission(domain.PermissionVehiclesUpdate)).Put("/vehicles/{id}", vehicleHandler.UpdateVehicle)
+
+			// Maintenance Suppliers
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/suppliers", maintenanceHandler.GetSuppliers)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/suppliers/{id}", maintenanceHandler.GetSupplierByID)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceCreate)).Post("/maintenance/suppliers", maintenanceHandler.CreateSupplier)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceUpdate)).Put("/maintenance/suppliers/{id}", maintenanceHandler.UpdateSupplier)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceDelete)).Delete("/maintenance/suppliers/{id}", maintenanceHandler.DeleteSupplier)
+
+			// Maintenance Plans
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/plans", maintenanceHandler.GetPlans)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/plans/{id}", maintenanceHandler.GetPlanByID)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceCreate)).Post("/maintenance/plans", maintenanceHandler.CreatePlan)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceUpdate)).Put("/maintenance/plans/{id}", maintenanceHandler.UpdatePlan)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceDelete)).Delete("/maintenance/plans/{id}", maintenanceHandler.DeletePlan)
+
+			// Maintenance Records
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/records", maintenanceHandler.GetMaintenances)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/records/{id}", maintenanceHandler.GetMaintenanceByID)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceCreate)).Post("/maintenance/records", maintenanceHandler.CreateMaintenance)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceUpdate)).Put("/maintenance/records/{id}", maintenanceHandler.UpdateMaintenance)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceDelete)).Delete("/maintenance/records/{id}", maintenanceHandler.DeleteMaintenance)
+
+			// Maintenance Alerts
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/alerts", maintenanceHandler.GetAlerts)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceUpdate)).Post("/maintenance/alerts/{id}/resolve", maintenanceHandler.ResolveAlert)
+
+			// Maintenance Dashboard & Reports
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/dashboard", maintenanceHandler.GetDashboard)
+			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/reports/costs", maintenanceHandler.GetCostReport)
 
 			// Advanced Reports (Protected by Billing Entitlement)
 			r.With(customMiddleware.RequireEntitlement(entitlementUseCase, domain.EntitlementFeatureAdvancedReports)).

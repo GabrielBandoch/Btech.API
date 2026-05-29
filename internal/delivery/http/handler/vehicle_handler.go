@@ -92,3 +92,33 @@ func (h *VehicleHandler) CreateVehicle(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusCreated, true, dto.VehicleFromDomain(created), "")
 }
+
+// UpdateVehicle handles modifying an existing vehicle's properties.
+func (h *VehicleHandler) UpdateVehicle(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	orgID, ok := middleware.OrganizationIDFromContext(ctx)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized: organization context missing")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		response.Error(w, http.StatusBadRequest, "vehicle ID is required")
+		return
+	}
+
+	var req dto.UpdateVehicleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	updated, err := h.useCase.UpdateVehicle(ctx, orgID, id, req.ToDomain())
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "vehicle not found")
+		return
+	}
+
+	response.OK(w, dto.VehicleFromDomain(updated))
+}

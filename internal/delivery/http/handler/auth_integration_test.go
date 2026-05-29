@@ -127,7 +127,7 @@ func TestAuthIntegration(t *testing.T) {
 	// Large capacity rate limiter to prevent rate limit blocks during main test suite
 	rateLimiter := middleware.NewRateLimiter(100.0, 100.0)
 
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, authMiddleware, rateLimiter.Limit, mockEntitlementUC, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, nil, authMiddleware, rateLimiter.Limit, mockEntitlementUC, log)
 
 	// Test 1: POST /auth/register - Success (Satisfies new password policy)
 	t.Run("Register_Success", func(t *testing.T) {
@@ -598,7 +598,7 @@ func TestAuthRateLimiting(t *testing.T) {
 
 	// Rate limiter with capacity = 2, rate = 0 (no token refills during test)
 	rateLimiter := middleware.NewRateLimiter(0.0, 2.0)
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, authMiddleware, rateLimiter.Limit, mockEntitlementUC, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, nil, authMiddleware, rateLimiter.Limit, mockEntitlementUC, log)
 
 	payload := `{"email":"test@example.com","password":"Password123!"}`
 	

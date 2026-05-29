@@ -10,6 +10,7 @@ type VehicleUseCase interface {
 	GetVehicles(ctx context.Context, orgID string) ([]domain.Vehicle, error)
 	GetVehicleByID(ctx context.Context, orgID string, id string) (domain.Vehicle, error)
 	CreateVehicle(ctx context.Context, orgID string, vehicle domain.Vehicle) (domain.Vehicle, error)
+	UpdateVehicle(ctx context.Context, orgID string, id string, vehicle domain.Vehicle) (domain.Vehicle, error)
 }
 
 type vehicleUseCase struct {
@@ -43,6 +44,20 @@ func (uc *vehicleUseCase) CreateVehicle(ctx context.Context, orgID string, vehic
 		"brand": v.Brand,
 		"model": v.Model,
 		"placa": v.Placa,
+	})
+
+	return v, nil
+}
+
+func (uc *vehicleUseCase) UpdateVehicle(ctx context.Context, orgID string, id string, vehicle domain.Vehicle) (domain.Vehicle, error) {
+	v, err := uc.repo.Update(ctx, orgID, id, vehicle)
+	if err != nil {
+		return domain.Vehicle{}, err
+	}
+
+	uc.auditUseCase.Log(ctx, domain.EventVehicleUpdate, "vehicle", &v.ID, map[string]interface{}{
+		"status":  v.Status,
+		"mileage": v.Mileage,
 	})
 
 	return v, nil

@@ -75,6 +75,10 @@ func main() {
 	vehicleRepo := postgres.NewPostgresVehicleRepository(db.Pool)
 	tripRepo := postgres.NewPostgresTripRepository(db.Pool)
 	incidentRepo := postgres.NewPostgresIncidentRepository(db.Pool)
+	maintenanceSupplierRepo := postgres.NewPostgresMaintenanceSupplierRepository(db.Pool)
+	maintenancePlanRepo := postgres.NewPostgresMaintenancePlanRepository(db.Pool)
+	maintenanceRepo := postgres.NewPostgresMaintenanceRepository(db.Pool)
+	maintenanceAlertRepo := postgres.NewPostgresMaintenanceAlertRepository(db.Pool)
 
 	// Auto-seed development database if in development mode
 	if cfg.Env == "development" {
@@ -100,6 +104,15 @@ func main() {
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)
+	maintenanceUseCase := usecase.NewMaintenanceUseCase(
+		maintenanceSupplierRepo,
+		maintenancePlanRepo,
+		maintenanceRepo,
+		maintenanceAlertRepo,
+		vehicleRepo,
+		auditUseCase,
+		log,
+	)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authUseCase)
@@ -107,6 +120,7 @@ func main() {
 	tripHandler := handler.NewTripHandler(tripUseCase)
 	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
 	vehicleHandler := handler.NewVehicleHandler(vehicleUseCase)
+	maintenanceHandler := handler.NewMaintenanceHandler(maintenanceUseCase)
 
 	// Middlewares
 	middleware.SetAuditUseCase(auditUseCase)
@@ -114,7 +128,7 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRate, cfg.RateLimitBurst)
 
 	// 5. Setup Router
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, maintenanceHandler, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
 
 	// 6. Setup Server
 	serverAddr := ":" + cfg.Port
