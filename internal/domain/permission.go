@@ -17,6 +17,10 @@ const (
 	PermissionIncidentsCreate = "incidents:create"
 	PermissionIncidentsRead   = "incidents:read"
 	PermissionSettingsManage  = "settings:manage"
+	PermissionVehiclesCreate  = "vehicles:create"
+	PermissionVehiclesRead    = "vehicles:read"
+	PermissionVehiclesUpdate  = "vehicles:update"
+	PermissionVehiclesDelete  = "vehicles:delete"
 )
 
 type Permission struct {

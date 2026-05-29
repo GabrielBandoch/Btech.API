@@ -7,14 +7,27 @@ import (
 
 // Audit event taxonomy constants
 const (
-	EventUserLogin        = "user.login"
-	EventUserRegister     = "user.register"
-	EventDriverCreate     = "driver.create"
-	EventDriverUpdate     = "driver.update"
-	EventTripUpdate       = "trip.update"
-	EventIncidentCreate   = "incident.create"
-	EventPermissionDenied = "permission.denied"
-	EventSettingsUpdate   = "settings.update"
+	EventUserLogin          = "user.login"
+	EventUserRegister       = "user.register"
+	EventUserLogout         = "user.logout"
+	EventSessionRefresh     = "session.refresh"
+	EventSessionRevoke      = "session.revoke"
+	EventSessionCompromised = "session.compromised"
+	EventDriverCreate       = "driver.create"
+	EventDriverUpdate       = "driver.update"
+	EventTripUpdate         = "trip.update"
+	EventIncidentCreate     = "incident.create"
+	EventPermissionDenied   = "permission.denied"
+	EventSettingsUpdate     = "settings.update"
+	EventSubscriptionCreated = "subscription.created"
+	EventSubscriptionUpdated = "subscription.updated"
+	EventSubscriptionCanceled = "subscription.canceled"
+	EventEntitlementChanged = "entitlement.changed"
+	EventQuotaExceeded      = "quota.exceeded"
+	EventFeatureAccessDenied = "feature.access_denied"
+	EventVehicleCreate      = "vehicle.create"
+	EventVehicleUpdate      = "vehicle.update"
+	EventVehicleDelete      = "vehicle.delete"
 )
 
 type ContextKey string

@@ -19,7 +19,6 @@ import (
 	"github.com/btech/fleetcontrol-api/internal/domain"
 	"github.com/btech/fleetcontrol-api/internal/platform/database"
 	"github.com/btech/fleetcontrol-api/internal/platform/logger"
-	"github.com/btech/fleetcontrol-api/internal/repository/memory"
 	"github.com/btech/fleetcontrol-api/internal/repository/postgres"
 	"github.com/btech/fleetcontrol-api/internal/usecase"
 )
@@ -42,6 +41,24 @@ func (m *mockUserRepoForLimit) GetByEmail(ctx context.Context, email string) (*d
 
 func (m *mockUserRepoForLimit) Create(ctx context.Context, user *domain.User) error {
 	return nil
+}
+
+func (m *mockUserRepoForLimit) CountByOrganization(ctx context.Context, orgID string) (int, error) {
+	return 0, nil
+}
+
+type mockEntitlementUseCase struct{}
+
+func (m *mockEntitlementUseCase) EvaluateFeature(ctx context.Context, orgID string, featureKey string) (bool, error) {
+	return true, nil
+}
+
+func (m *mockEntitlementUseCase) EvaluateQuota(ctx context.Context, orgID string, quotaKey string, currentUsage int) (bool, error) {
+	return true, nil
+}
+
+func (m *mockEntitlementUseCase) GetEntitlementValue(ctx context.Context, orgID string, key string) (string, error) {
+	return "", nil
 }
 
 func TestAuthIntegration(t *testing.T) {
@@ -72,7 +89,7 @@ func TestAuthIntegration(t *testing.T) {
 	}
 
 	// Clear tables for clean test environment
-	_, err = db.Pool.Exec(context.Background(), "TRUNCATE TABLE users, organizations CASCADE")
+	_, err = db.Pool.Exec(context.Background(), "TRUNCATE TABLE users, organizations, user_sessions CASCADE")
 	if err != nil {
 		t.Fatalf("failed to truncate users table: %v", err)
 	}
@@ -82,22 +99,27 @@ func TestAuthIntegration(t *testing.T) {
 	orgRepo := postgres.NewPostgresOrganizationRepository(db.Pool)
 	permissionRepo := postgres.NewPostgresPermissionRepository(db.Pool)
 	auditLogRepo := postgres.NewPostgresAuditLogRepository(db.Pool)
-	driverRepo := memory.NewMemoryDriverRepository()
-	tripRepo := memory.NewMemoryTripRepository()
-	incidentRepo := memory.NewMemoryIncidentRepository()
+	sessionRepo := postgres.NewPostgresUserSessionRepository(db.Pool)
+	driverRepo := postgres.NewPostgresDriverRepository(db.Pool)
+	vehicleRepo := postgres.NewPostgresVehicleRepository(db.Pool)
+	tripRepo := postgres.NewPostgresTripRepository(db.Pool)
+	incidentRepo := postgres.NewPostgresIncidentRepository(db.Pool)
 
-	// Short-lived JWT expiration (2 seconds) for expiration verification
 	jwtExpires := 2 * time.Second
 	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, log)
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, auditUseCase, cfg.JWTSecret, jwtExpires, 4) // cost = 4 for fast testing
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, auditUseCase)
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, sessionRepo, auditUseCase, cfg.JWTSecret, jwtExpires, 7*24*time.Hour, 4) // cost = 4 for fast testing
+	
+	mockEntitlementUC := &mockEntitlementUseCase{}
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, mockEntitlementUC, auditUseCase)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
+	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)
 
 	authHandler := handler.NewAuthHandler(authUseCase)
 	driverHandler := handler.NewDriverHandler(driverUseCase)
 	tripHandler := handler.NewTripHandler(tripUseCase)
 	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
+	vehicleHandler := handler.NewVehicleHandler(vehicleUseCase)
 
 	middleware.SetAuditUseCase(auditUseCase)
 	authMiddleware := middleware.AuthMiddleware(authUseCase)
@@ -105,7 +127,7 @@ func TestAuthIntegration(t *testing.T) {
 	// Large capacity rate limiter to prevent rate limit blocks during main test suite
 	rateLimiter := middleware.NewRateLimiter(100.0, 100.0)
 
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, authMiddleware, rateLimiter.Limit, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, authMiddleware, rateLimiter.Limit, mockEntitlementUC, log)
 
 	// Test 1: POST /auth/register - Success (Satisfies new password policy)
 	t.Run("Register_Success", func(t *testing.T) {
@@ -525,6 +547,26 @@ func (m *mockPermissionRepoForLimit) GetPermissionsByRole(ctx context.Context, r
 	return []string{}, nil
 }
 
+type mockUserSessionRepoForLimit struct{}
+func (m *mockUserSessionRepoForLimit) GetByID(ctx context.Context, id string) (*domain.UserSession, error) {
+	return nil, domain.ErrSessionNotFound
+}
+func (m *mockUserSessionRepoForLimit) Create(ctx context.Context, s *domain.UserSession) error {
+	return nil
+}
+func (m *mockUserSessionRepoForLimit) Update(ctx context.Context, s *domain.UserSession) error {
+	return nil
+}
+func (m *mockUserSessionRepoForLimit) Delete(ctx context.Context, id string) error {
+	return nil
+}
+func (m *mockUserSessionRepoForLimit) ListByUserID(ctx context.Context, userID, orgID string) ([]*domain.UserSession, error) {
+	return []*domain.UserSession{}, nil
+}
+func (m *mockUserSessionRepoForLimit) RevokeAllByUserID(ctx context.Context, userID string) error {
+	return nil
+}
+
 func TestAuthRateLimiting(t *testing.T) {
 	log := logger.New("development")
 	cfg := config.Load()
@@ -533,25 +575,30 @@ func TestAuthRateLimiting(t *testing.T) {
 	userRepo := &mockUserRepoForLimit{}
 	orgRepo := &mockOrgRepoForLimit{}
 	permissionRepo := &mockPermissionRepoForLimit{}
+	sessionRepo := &mockUserSessionRepoForLimit{}
 	auditUseCase := &mockAuditUseCaseForLimit{}
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, auditUseCase, cfg.JWTSecret, 1*time.Hour, 4)
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, sessionRepo, auditUseCase, cfg.JWTSecret, 1*time.Hour, 7*24*time.Hour, 4)
 	authHandler := handler.NewAuthHandler(authUseCase)
 	
-	driverRepo := memory.NewMemoryDriverRepository()
-	tripRepo := memory.NewMemoryTripRepository()
-	incidentRepo := memory.NewMemoryIncidentRepository()
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, auditUseCase)
+	driverRepo := postgres.NewPostgresDriverRepository(nil)
+	vehicleRepo := postgres.NewPostgresVehicleRepository(nil)
+	tripRepo := postgres.NewPostgresTripRepository(nil)
+	incidentRepo := postgres.NewPostgresIncidentRepository(nil)
+	mockEntitlementUC := &mockEntitlementUseCase{}
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, mockEntitlementUC, auditUseCase)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
+	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)
 	driverHandler := handler.NewDriverHandler(driverUseCase)
 	tripHandler := handler.NewTripHandler(tripUseCase)
 	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
+	vehicleHandler := handler.NewVehicleHandler(vehicleUseCase)
 	
 	authMiddleware := middleware.AuthMiddleware(authUseCase)
 
 	// Rate limiter with capacity = 2, rate = 0 (no token refills during test)
 	rateLimiter := middleware.NewRateLimiter(0.0, 2.0)
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, authMiddleware, rateLimiter.Limit, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, authMiddleware, rateLimiter.Limit, mockEntitlementUC, log)
 
 	payload := `{"email":"test@example.com","password":"Password123!"}`
 	

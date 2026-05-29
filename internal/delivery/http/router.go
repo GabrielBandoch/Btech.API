@@ -13,6 +13,7 @@ import (
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/handler"
 	customMiddleware "github.com/btech/fleetcontrol-api/internal/delivery/http/middleware"
 	"github.com/btech/fleetcontrol-api/internal/domain"
+	"github.com/btech/fleetcontrol-api/internal/usecase"
 )
 
 // NewRouter configures routes, sets up CORS, and attaches middlewares.
@@ -22,8 +23,10 @@ func NewRouter(
 	tripHandler *handler.TripHandler,
 	incidentHandler *handler.IncidentHandler,
 	authHandler *handler.AuthHandler,
+	vehicleHandler *handler.VehicleHandler,
 	authMiddleware func(http.Handler) http.Handler,
 	rateLimiterMiddleware func(http.Handler) http.Handler,
+	entitlementUseCase usecase.EntitlementUseCase,
 	logger *slog.Logger,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -56,6 +59,8 @@ func NewRouter(
 			r.Use(rateLimiterMiddleware)
 			r.Post("/register", authHandler.Register)
 			r.Post("/login", authHandler.Login)
+			r.Post("/refresh", authHandler.Refresh)
+			r.Post("/logout", authHandler.Logout)
 		})
 
 		// Protected Route Group
@@ -64,6 +69,8 @@ func NewRouter(
 
 			// Authenticated User
 			r.Get("/auth/me", authHandler.Me)
+			r.Get("/auth/sessions", authHandler.ListSessions)
+			r.Delete("/auth/sessions/{id}", authHandler.RevokeSession)
 
 			// Drivers
 			r.Get("/drivers", driverHandler.GetDrivers)
@@ -79,6 +86,19 @@ func NewRouter(
 			r.Get("/incidents", incidentHandler.GetIncidents)
 			r.With(customMiddleware.RequirePermission(domain.PermissionIncidentsCreate)).Post("/incidents", incidentHandler.CreateIncident)
 			r.With(customMiddleware.RequirePermission(domain.PermissionIncidentsCreate)).Put("/incidents/{id}", incidentHandler.UpdateIncident)
+
+			// Vehicles
+			r.With(customMiddleware.RequirePermission(domain.PermissionVehiclesRead)).Get("/vehicles", vehicleHandler.GetVehicles)
+			r.With(customMiddleware.RequirePermission(domain.PermissionVehiclesRead)).Get("/vehicles/{id}", vehicleHandler.GetVehicleByID)
+			r.With(customMiddleware.RequirePermission(domain.PermissionVehiclesCreate)).Post("/vehicles", vehicleHandler.CreateVehicle)
+
+			// Advanced Reports (Protected by Billing Entitlement)
+			r.With(customMiddleware.RequireEntitlement(entitlementUseCase, domain.EntitlementFeatureAdvancedReports)).
+				Get("/reports/advanced", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(`{"status":"success","data":"advanced report data"}`))
+				})
 		})
 	})
 

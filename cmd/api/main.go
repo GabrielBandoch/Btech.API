@@ -16,7 +16,6 @@ import (
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/middleware"
 	"github.com/btech/fleetcontrol-api/internal/platform/database"
 	"github.com/btech/fleetcontrol-api/internal/platform/logger"
-	"github.com/btech/fleetcontrol-api/internal/repository/memory"
 	"github.com/btech/fleetcontrol-api/internal/repository/postgres"
 	"github.com/btech/fleetcontrol-api/internal/usecase"
 )
@@ -54,15 +53,28 @@ func main() {
 		jwtDuration = 24 * time.Hour
 	}
 
+	// Parse Refresh Token Expires duration
+	refreshTokenDuration, err := time.ParseDuration(cfg.RefreshTokenExpiresIn)
+	if err != nil {
+		log.Warn("Failed to parse REFRESH_TOKEN_EXPIRES_IN, defaulting to 168h", slog.String("err", err.Error()))
+		refreshTokenDuration = 7 * 24 * time.Hour
+	}
+
 	// 4. Dependency Injection
 	// Repositories
 	userRepo := postgres.NewPostgresUserRepository(db.Pool)
 	orgRepo := postgres.NewPostgresOrganizationRepository(db.Pool)
 	permissionRepo := postgres.NewPostgresPermissionRepository(db.Pool)
 	auditLogRepo := postgres.NewPostgresAuditLogRepository(db.Pool)
-	driverRepo := memory.NewMemoryDriverRepository()
-	tripRepo := memory.NewMemoryTripRepository()
-	incidentRepo := memory.NewMemoryIncidentRepository()
+	sessionRepo := postgres.NewPostgresUserSessionRepository(db.Pool)
+	planRepo := postgres.NewPostgresPlanRepository(db.Pool)
+	subscriptionRepo := postgres.NewPostgresSubscriptionRepository(db.Pool)
+	entitlementRepo := postgres.NewPostgresEntitlementRepository(db.Pool)
+	usageRepo := postgres.NewPostgresUsageCounterRepository(db.Pool)
+	driverRepo := postgres.NewPostgresDriverRepository(db.Pool)
+	vehicleRepo := postgres.NewPostgresVehicleRepository(db.Pool)
+	tripRepo := postgres.NewPostgresTripRepository(db.Pool)
+	incidentRepo := postgres.NewPostgresIncidentRepository(db.Pool)
 
 	// Auto-seed development database if in development mode
 	if cfg.Env == "development" {
@@ -75,16 +87,26 @@ func main() {
 
 	// UseCases
 	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, log)
-	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, auditUseCase, cfg.JWTSecret, jwtDuration, cfg.BCryptCost)
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, auditUseCase)
+	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, sessionRepo, auditUseCase, cfg.JWTSecret, jwtDuration, refreshTokenDuration, cfg.BCryptCost)
+	
+	// Billing UseCases
+	billingUseCase := usecase.NewBillingUseCase(subscriptionRepo, planRepo, auditUseCase, log)
+	_ = billingUseCase // make sure it's referenced or register it as needed
+	entitlementUseCase := usecase.NewEntitlementUseCase(subscriptionRepo, planRepo, entitlementRepo, auditUseCase)
+	usageTrackingUseCase := usecase.NewUsageTrackingUseCase(usageRepo, entitlementUseCase, auditUseCase)
+	_ = usageTrackingUseCase // make sure it's referenced or register it as needed
+
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
+	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authUseCase)
 	driverHandler := handler.NewDriverHandler(driverUseCase)
 	tripHandler := handler.NewTripHandler(tripUseCase)
 	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
+	vehicleHandler := handler.NewVehicleHandler(vehicleUseCase)
 
 	// Middlewares
 	middleware.SetAuditUseCase(auditUseCase)
@@ -92,7 +114,7 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRate, cfg.RateLimitBurst)
 
 	// 5. Setup Router
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, authMiddleware, rateLimiter.Limit, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
 
 	// 6. Setup Server
 	serverAddr := ":" + cfg.Port

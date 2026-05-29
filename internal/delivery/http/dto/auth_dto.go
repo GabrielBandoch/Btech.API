@@ -138,3 +138,36 @@ func (r *LoginRequest) Validate() error {
 
 	return nil
 }
+
+type SessionResponse struct {
+	ID         string     `json:"id"`
+	UserAgent  string     `json:"userAgent"`
+	IPAddress  string     `json:"ipAddress"`
+	IsCurrent  bool       `json:"isCurrent"`
+	LastSeenAt *time.Time `json:"lastSeenAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
+}
+
+// SessionToResponse maps a domain.UserSession to a SessionResponse DTO.
+func SessionToResponse(s *domain.UserSession, currentSessionID string) SessionResponse {
+	return SessionResponse{
+		ID:         s.ID,
+		UserAgent:  s.UserAgent,
+		IPAddress:  s.IPAddress,
+		IsCurrent:  s.ID == currentSessionID,
+		LastSeenAt: s.LastSeenAt,
+		CreatedAt:  s.CreatedAt,
+	}
+}
+
+// SessionsToResponseList maps a list of domain.UserSession to a list of SessionResponse DTOs.
+func SessionsToResponseList(sessions []*domain.UserSession, currentSessionID string) []SessionResponse {
+	list := make([]SessionResponse, 0, len(sessions))
+	for _, s := range sessions {
+		if !s.IsRevoked {
+			list = append(list, SessionToResponse(s, currentSessionID))
+		}
+	}
+	return list
+}
+

@@ -2,11 +2,13 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/dto"
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/middleware"
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/response"
+	"github.com/btech/fleetcontrol-api/internal/domain"
 	"github.com/btech/fleetcontrol-api/internal/usecase"
 	"github.com/go-chi/chi/v5"
 )
@@ -87,6 +89,10 @@ func (h *DriverHandler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.useCase.CreateDriver(ctx, orgID, req.ToDomain())
 	if err != nil {
+		if errors.Is(err, domain.ErrQuotaExceeded) {
+			response.Error(w, http.StatusPaymentRequired, "organization driver limit exceeded, please upgrade plan")
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "failed to create driver")
 		return
 	}

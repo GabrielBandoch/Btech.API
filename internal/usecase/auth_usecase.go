@@ -3,6 +3,8 @@ package usecase
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -21,31 +23,50 @@ var (
 
 type AuthUseCase interface {
 	RegisterUser(ctx context.Context, name, email, password, role string) (*domain.User, error)
-	LoginUser(ctx context.Context, email, password string) (*domain.User, string, error)
+	LoginUser(ctx context.Context, email, password string) (*domain.User, string, string, error)
 	ValidateToken(ctx context.Context, token string) (*domain.User, *security.JWTClaims, error)
 	GetOrganizationByID(ctx context.Context, id string) (*domain.Organization, error)
+	RefreshTokenRotation(ctx context.Context, refreshTokenStr, ip, ua string) (*domain.User, string, string, error)
+	LogoutUser(ctx context.Context, refreshTokenStr string) error
+	ListSessions(ctx context.Context, userID, orgID string) ([]*domain.UserSession, error)
+	RevokeSession(ctx context.Context, sessionID, userID, orgID string) error
+	ParseRefreshToken(ctx context.Context, tokenStr string) (*security.RefreshClaims, error)
 }
 
 type authUseCase struct {
-	userRepo       domain.UserRepository
-	orgRepo        domain.OrganizationRepository
-	permissionRepo domain.PermissionRepository
-	auditUseCase   AuditUseCase
-	jwtSecret      string
-	jwtExpiresIn   time.Duration
-	bcryptCost     int
+	userRepo              domain.UserRepository
+	orgRepo               domain.OrganizationRepository
+	permissionRepo        domain.PermissionRepository
+	sessionRepo           domain.UserSessionRepository
+	auditUseCase          AuditUseCase
+	jwtSecret             string
+	jwtExpiresIn          time.Duration
+	refreshTokenExpiresIn time.Duration
+	bcryptCost            int
 }
 
 // NewAuthUseCase instantiates a new AuthUseCase.
-func NewAuthUseCase(userRepo domain.UserRepository, orgRepo domain.OrganizationRepository, permissionRepo domain.PermissionRepository, auditUseCase AuditUseCase, jwtSecret string, jwtExpiresIn time.Duration, bcryptCost int) AuthUseCase {
+func NewAuthUseCase(
+	userRepo domain.UserRepository,
+	orgRepo domain.OrganizationRepository,
+	permissionRepo domain.PermissionRepository,
+	sessionRepo domain.UserSessionRepository,
+	auditUseCase AuditUseCase,
+	jwtSecret string,
+	jwtExpiresIn time.Duration,
+	refreshTokenExpiresIn time.Duration,
+	bcryptCost int,
+) AuthUseCase {
 	return &authUseCase{
-		userRepo:       userRepo,
-		orgRepo:        orgRepo,
-		permissionRepo: permissionRepo,
-		auditUseCase:   auditUseCase,
-		jwtSecret:      jwtSecret,
-		jwtExpiresIn:   jwtExpiresIn,
-		bcryptCost:     bcryptCost,
+		userRepo:              userRepo,
+		orgRepo:               orgRepo,
+		permissionRepo:        permissionRepo,
+		sessionRepo:           sessionRepo,
+		auditUseCase:          auditUseCase,
+		jwtSecret:             jwtSecret,
+		jwtExpiresIn:          jwtExpiresIn,
+		refreshTokenExpiresIn: refreshTokenExpiresIn,
+		bcryptCost:            bcryptCost,
 	}
 }
 
@@ -157,38 +178,70 @@ func (uc *authUseCase) RegisterUser(ctx context.Context, name, email, password, 
 	return user, nil
 }
 
-func (uc *authUseCase) LoginUser(ctx context.Context, email, password string) (*domain.User, string, error) {
+func (uc *authUseCase) LoginUser(ctx context.Context, email, password string) (*domain.User, string, string, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 
 	if email == "" || password == "" {
-		return nil, "", errors.New("email and password are required")
+		return nil, "", "", errors.New("email and password are required")
 	}
 
 	user, err := uc.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, domain.ErrUserNotFound) {
-			return nil, "", ErrInvalidCredentials
+			return nil, "", "", ErrInvalidCredentials
 		}
-		return nil, "", ErrInternal
+		return nil, "", "", ErrInternal
 	}
 
 	if !security.ComparePassword(user.PasswordHash, password) {
-		return nil, "", ErrInvalidCredentials
+		return nil, "", "", ErrInvalidCredentials
 	}
 
 	// Verify organization user mapping
 	orgUser, err := uc.orgRepo.GetOrganizationUser(ctx, user.OrganizationID, user.ID)
 	if err != nil {
 		if errors.Is(err, domain.ErrOrgUserNotFound) {
-			return nil, "", errors.New("unauthorized: no active organization association found")
+			return nil, "", "", errors.New("unauthorized: no active organization association found")
 		}
-		return nil, "", ErrInternal
+		return nil, "", "", ErrInternal
 	}
 
 	// Generate access token with organization ID and role claims
 	token, err := security.GenerateToken(user.ID, user.OrganizationID, orgUser.Role, uc.jwtSecret, uc.jwtExpiresIn)
 	if err != nil {
-		return nil, "", ErrInternal
+		return nil, "", "", ErrInternal
+	}
+
+	// Generate user session
+	sessionID := newUUID()
+	refreshToken, err := security.GenerateRefreshToken(sessionID, user.ID, user.OrganizationID, uc.jwtSecret, uc.refreshTokenExpiresIn)
+	if err != nil {
+		return nil, "", "", ErrInternal
+	}
+
+	tokenHash := hashString(refreshToken)
+	now := time.Now()
+
+	ip := extractStringFromContext(ctx, domain.ClientIPContextKey)
+	ua := extractStringFromContext(ctx, domain.UserAgentContextKey)
+
+	session := &domain.UserSession{
+		ID:             sessionID,
+		UserID:         user.ID,
+		OrganizationID: user.OrganizationID,
+		TokenHash:      tokenHash,
+		TokenVersion:   1,
+		UserAgent:      ua,
+		IPAddress:      ip,
+		IsRevoked:      false,
+		ExpiresAt:      now.Add(uc.refreshTokenExpiresIn),
+		LastSeenAt:     &now,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	if err := uc.sessionRepo.Create(ctx, session); err != nil {
+		return nil, "", "", ErrInternal
 	}
 
 	// Set user active role to organization role
@@ -196,7 +249,7 @@ func (uc *authUseCase) LoginUser(ctx context.Context, email, password string) (*
 
 	perms, err := uc.permissionRepo.GetPermissionsByRole(ctx, orgUser.Role)
 	if err != nil {
-		return nil, "", ErrInternal
+		return nil, "", "", ErrInternal
 	}
 	user.Permissions = perms
 
@@ -204,9 +257,10 @@ func (uc *authUseCase) LoginUser(ctx context.Context, email, password string) (*
 	uc.auditUseCase.Log(ctx, domain.EventUserLogin, "user", &user.ID, map[string]interface{}{
 		"email":           user.Email,
 		"organization_id": user.OrganizationID,
+		"session_id":      sessionID,
 	})
 
-	return user, token, nil
+	return user, token, refreshToken, nil
 }
 
 func (uc *authUseCase) ValidateToken(ctx context.Context, tokenStr string) (*domain.User, *security.JWTClaims, error) {
@@ -245,6 +299,187 @@ func (uc *authUseCase) ValidateToken(ctx context.Context, tokenStr string) (*dom
 	return user, claims, nil
 }
 
+func (uc *authUseCase) RefreshTokenRotation(ctx context.Context, refreshTokenStr, ip, ua string) (*domain.User, string, string, error) {
+	claims, err := security.ValidateRefreshToken(refreshTokenStr, uc.jwtSecret)
+	if err != nil {
+		return nil, "", "", errors.New("unauthorized: invalid or expired refresh token")
+	}
+
+	session, err := uc.sessionRepo.GetByID(ctx, claims.SessionID)
+	if err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) {
+			return nil, "", "", errors.New("unauthorized: session not found")
+		}
+		return nil, "", "", ErrInternal
+	}
+
+	if session.IsRevoked {
+		return nil, "", "", errors.New("unauthorized: session is revoked")
+	}
+
+	if session.ExpiresAt.Before(time.Now()) {
+		return nil, "", "", errors.New("unauthorized: session expired")
+	}
+
+	incomingHash := hashString(refreshTokenStr)
+
+	// Replay Attack Detection
+	if session.TokenHash != incomingHash {
+		// Old token used -> Compromised! Revoke entire family
+		session.IsRevoked = true
+		session.UpdatedAt = time.Now()
+		_ = uc.sessionRepo.Update(ctx, session)
+
+		// Log security breach
+		uc.auditUseCase.Log(ctx, domain.EventSessionCompromised, "session", &session.ID, map[string]interface{}{
+			"session_id":      session.ID,
+			"user_id":         session.UserID,
+			"organization_id": session.OrganizationID,
+			"ip_address":      ip,
+			"user_agent":      ua,
+		})
+
+		return nil, "", "", errors.New("unauthorized: session compromised")
+	}
+
+	// Fetch user details
+	user, err := uc.userRepo.GetByID(ctx, session.UserID)
+	if err != nil {
+		if errors.Is(err, domain.ErrUserNotFound) {
+			return nil, "", "", errors.New("unauthorized: user not found")
+		}
+		return nil, "", "", ErrInternal
+	}
+
+	// Verify organization user mapping
+	orgUser, err := uc.orgRepo.GetOrganizationUser(ctx, session.OrganizationID, user.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrOrgUserNotFound) {
+			return nil, "", "", errors.New("unauthorized: no active organization association found")
+		}
+		return nil, "", "", ErrInternal
+	}
+
+	// Set active role and organization
+	user.Role = orgUser.Role
+	user.OrganizationID = orgUser.OrganizationID
+
+	perms, err := uc.permissionRepo.GetPermissionsByRole(ctx, orgUser.Role)
+	if err != nil {
+		return nil, "", "", ErrInternal
+	}
+	user.Permissions = perms
+
+	// Rotate tokens
+	newAccessToken, err := security.GenerateToken(user.ID, user.OrganizationID, orgUser.Role, uc.jwtSecret, uc.jwtExpiresIn)
+	if err != nil {
+		return nil, "", "", ErrInternal
+	}
+
+	newRefreshToken, err := security.GenerateRefreshToken(session.ID, user.ID, user.OrganizationID, uc.jwtSecret, uc.refreshTokenExpiresIn)
+	if err != nil {
+		return nil, "", "", ErrInternal
+	}
+
+	now := time.Now()
+	newHash := hashString(newRefreshToken)
+
+	session.TokenHash = newHash
+	session.TokenVersion = session.TokenVersion + 1
+	session.ExpiresAt = now.Add(uc.refreshTokenExpiresIn)
+	session.IPAddress = ip
+	session.UserAgent = ua
+	session.LastSeenAt = &now
+	session.UpdatedAt = now
+
+	if err := uc.sessionRepo.Update(ctx, session); err != nil {
+		return nil, "", "", ErrInternal
+	}
+
+	// Log refresh event
+	uc.auditUseCase.Log(ctx, domain.EventSessionRefresh, "session", &session.ID, map[string]interface{}{
+		"session_id": session.ID,
+		"user_id":    user.ID,
+	})
+
+	return user, newAccessToken, newRefreshToken, nil
+}
+
+func (uc *authUseCase) LogoutUser(ctx context.Context, refreshTokenStr string) error {
+	if refreshTokenStr == "" {
+		return nil // Resilient logout: succeed even if cookie is missing
+	}
+
+	claims, err := security.ValidateRefreshToken(refreshTokenStr, uc.jwtSecret)
+	if err != nil {
+		return nil // Resilient logout: succeed even if token is invalid or expired
+	}
+
+	session, err := uc.sessionRepo.GetByID(ctx, claims.SessionID)
+	if err != nil {
+		return nil // Resilient logout: succeed if session not found
+	}
+
+	if !session.IsRevoked {
+		session.IsRevoked = true
+		session.UpdatedAt = time.Now()
+		_ = uc.sessionRepo.Update(ctx, session)
+
+		// Log user logout event
+		uc.auditUseCase.Log(ctx, domain.EventUserLogout, "user", &session.UserID, map[string]interface{}{
+			"session_id":      session.ID,
+			"organization_id": session.OrganizationID,
+		})
+	}
+
+	return nil
+}
+
+func (uc *authUseCase) ListSessions(ctx context.Context, userID, orgID string) ([]*domain.UserSession, error) {
+	return uc.sessionRepo.ListByUserID(ctx, userID, orgID)
+}
+
+func (uc *authUseCase) RevokeSession(ctx context.Context, sessionID, userID, orgID string) error {
+	session, err := uc.sessionRepo.GetByID(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, domain.ErrSessionNotFound) {
+			return domain.ErrSessionNotFound
+		}
+		return ErrInternal
+	}
+
+	// Enforce tenant isolation and ownership
+	if session.UserID != userID || session.OrganizationID != orgID {
+		return errors.New("forbidden: cannot revoke session belonging to another user or tenant")
+	}
+
+	if !session.IsRevoked {
+		session.IsRevoked = true
+		session.UpdatedAt = time.Now()
+		if err := uc.sessionRepo.Update(ctx, session); err != nil {
+			return ErrInternal
+		}
+
+		// Log session revoke event
+		uc.auditUseCase.Log(ctx, domain.EventSessionRevoke, "session", &session.ID, map[string]interface{}{
+			"session_id":      session.ID,
+			"revoked_user_id": session.UserID,
+		})
+	}
+
+	return nil
+}
+
+func (uc *authUseCase) ParseRefreshToken(ctx context.Context, tokenStr string) (*security.RefreshClaims, error) {
+	return security.ValidateRefreshToken(tokenStr, uc.jwtSecret)
+}
+
+func hashString(s string) string {
+	h := sha256.New()
+	h.Write([]byte(s))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // newUUID generates a version 4 UUID.
 func newUUID() string {
 	b := make([]byte, 16)
@@ -270,3 +505,4 @@ func generateSlug(name string) string {
 	}
 	return strings.Trim(res, "-")
 }
+

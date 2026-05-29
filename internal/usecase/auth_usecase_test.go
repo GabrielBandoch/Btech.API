@@ -50,6 +50,16 @@ func (m *mockUserRepository) Create(ctx context.Context, user *domain.User) erro
 	return nil
 }
 
+func (m *mockUserRepository) CountByOrganization(ctx context.Context, orgID string) (int, error) {
+	count := 0
+	for _, u := range m.users {
+		if u.OrganizationID == orgID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 type mockOrganizationRepository struct {
 	orgs     map[string]*domain.Organization
 	orgUsers map[string]*domain.OrganizationUser
@@ -128,13 +138,66 @@ func (m *mockAuditUseCase) GetLogsByOrganization(ctx context.Context, orgID stri
 	return []*domain.AuditLog{}, nil
 }
 
+type mockUserSessionRepository struct {
+	sessions map[string]*domain.UserSession
+}
+
+func newMockUserSessionRepository() *mockUserSessionRepository {
+	return &mockUserSessionRepository{
+		sessions: make(map[string]*domain.UserSession),
+	}
+}
+
+func (m *mockUserSessionRepository) GetByID(ctx context.Context, id string) (*domain.UserSession, error) {
+	s, ok := m.sessions[id]
+	if !ok {
+		return nil, domain.ErrSessionNotFound
+	}
+	return s, nil
+}
+
+func (m *mockUserSessionRepository) Create(ctx context.Context, s *domain.UserSession) error {
+	m.sessions[s.ID] = s
+	return nil
+}
+
+func (m *mockUserSessionRepository) Update(ctx context.Context, s *domain.UserSession) error {
+	m.sessions[s.ID] = s
+	return nil
+}
+
+func (m *mockUserSessionRepository) Delete(ctx context.Context, id string) error {
+	delete(m.sessions, id)
+	return nil
+}
+
+func (m *mockUserSessionRepository) ListByUserID(ctx context.Context, userID, orgID string) ([]*domain.UserSession, error) {
+	var list []*domain.UserSession
+	for _, s := range m.sessions {
+		if s.UserID == userID && s.OrganizationID == orgID {
+			list = append(list, s)
+		}
+	}
+	return list, nil
+}
+
+func (m *mockUserSessionRepository) RevokeAllByUserID(ctx context.Context, userID string) error {
+	for _, s := range m.sessions {
+		if s.UserID == userID {
+			s.IsRevoked = true
+		}
+	}
+	return nil
+}
+
 func TestAuthUseCase_RegisterUser(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
 	permRepo := newMockPermissionRepository()
+	sessionRepo := newMockUserSessionRepository()
 	auditUC := &mockAuditUseCase{}
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, permRepo, auditUC, secret, 1*time.Hour, 4) // cost = 4 for fast tests
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, sessionRepo, auditUC, secret, 1*time.Hour, 7*24*time.Hour, 4) // cost = 4 for fast tests
 
 	ctx := context.Background()
 
@@ -177,9 +240,10 @@ func TestAuthUseCase_LoginUser(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
 	permRepo := newMockPermissionRepository()
+	sessionRepo := newMockUserSessionRepository()
 	auditUC := &mockAuditUseCase{}
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, permRepo, auditUC, secret, 1*time.Hour, 4)
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, sessionRepo, auditUC, secret, 1*time.Hour, 7*24*time.Hour, 4)
 
 	ctx := context.Background()
 
@@ -190,7 +254,7 @@ func TestAuthUseCase_LoginUser(t *testing.T) {
 	}
 
 	// 1. Success login
-	user, token, err := uc.LoginUser(ctx, "ALICE@example.com", "SecurePassword123!")
+	user, token, _, err := uc.LoginUser(ctx, "ALICE@example.com", "SecurePassword123!")
 	if err != nil {
 		t.Fatalf("expected no error on login, got %v", err)
 	}
@@ -218,13 +282,13 @@ func TestAuthUseCase_LoginUser(t *testing.T) {
 	}
 
 	// 2. Invalid credentials
-	_, _, err = uc.LoginUser(ctx, "alice@example.com", "wrongpassword")
+	_, _, _, err = uc.LoginUser(ctx, "alice@example.com", "wrongpassword")
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Errorf("expected ErrInvalidCredentials, got %v", err)
 	}
 
 	// 3. User not found
-	_, _, err = uc.LoginUser(ctx, "unknown@example.com", "SecurePassword123!")
+	_, _, _, err = uc.LoginUser(ctx, "unknown@example.com", "SecurePassword123!")
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Errorf("expected ErrInvalidCredentials, got %v", err)
 	}
@@ -234,9 +298,10 @@ func TestAuthUseCase_ValidateToken(t *testing.T) {
 	repo := newMockUserRepository()
 	orgRepo := newMockOrganizationRepository()
 	permRepo := newMockPermissionRepository()
+	sessionRepo := newMockUserSessionRepository()
 	auditUC := &mockAuditUseCase{}
 	secret := "mysecretjwtsecretmysecretjwtsecret"
-	uc := NewAuthUseCase(repo, orgRepo, permRepo, auditUC, secret, 1*time.Second, 4)
+	uc := NewAuthUseCase(repo, orgRepo, permRepo, sessionRepo, auditUC, secret, 1*time.Second, 7*24*time.Hour, 4)
 
 	ctx := context.Background()
 
@@ -245,7 +310,7 @@ func TestAuthUseCase_ValidateToken(t *testing.T) {
 		t.Fatalf("setup failed: %v", err)
 	}
 
-	_, token, err := uc.LoginUser(ctx, "bob@example.com", "SecurePassword123!")
+	_, token, _, err := uc.LoginUser(ctx, "bob@example.com", "SecurePassword123!")
 	if err != nil {
 		t.Fatalf("login failed: %v", err)
 	}
@@ -271,3 +336,4 @@ func TestAuthUseCase_ValidateToken(t *testing.T) {
 		t.Error("expected error for expired token, got nil")
 	}
 }
+

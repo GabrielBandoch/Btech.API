@@ -3,10 +3,13 @@ package dto
 import "github.com/btech/fleetcontrol-api/internal/domain"
 
 type CheckpointResponse struct {
-	Name        string `json:"name"`
-	PlannedTime string `json:"plannedTime,omitempty"`
-	Timestamp   string `json:"timestamp,omitempty"`
-	Type        string `json:"type"`
+	ID          string   `json:"id"`
+	Sequence    int      `json:"sequence"`
+	Name        string   `json:"name"`
+	Latitude    *float64 `json:"latitude,omitempty"`
+	Longitude   *float64 `json:"longitude,omitempty"`
+	PlannedTime string   `json:"plannedTime,omitempty"`
+	Timestamp   string   `json:"timestamp,omitempty"`
 }
 
 type TripResponse struct {
@@ -39,11 +42,22 @@ type UpdateTripRequest struct {
 func TripFromDomain(t domain.Trip) TripResponse {
 	checkpoints := make([]CheckpointResponse, len(t.Checkpoints))
 	for i, c := range t.Checkpoints {
+		var plannedTime string
+		if c.PlannedAt != nil {
+			plannedTime = *c.PlannedAt
+		}
+		var timestamp string
+		if c.ArrivedAt != nil {
+			timestamp = *c.ArrivedAt
+		}
 		checkpoints[i] = CheckpointResponse{
+			ID:          c.ID,
+			Sequence:    c.Sequence,
 			Name:        c.Name,
-			PlannedTime: c.PlannedTime,
-			Timestamp:   c.Timestamp,
-			Type:        c.Type,
+			Latitude:    c.Latitude,
+			Longitude:   c.Longitude,
+			PlannedTime: plannedTime,
+			Timestamp:   timestamp,
 		}
 	}
 

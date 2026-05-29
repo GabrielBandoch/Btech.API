@@ -119,3 +119,14 @@ func (r *PostgresUserRepository) Create(ctx context.Context, user *domain.User) 
 
 	return nil
 }
+
+func (r *PostgresUserRepository) CountByOrganization(ctx context.Context, orgID string) (int, error) {
+	query := `SELECT COUNT(*) FROM users WHERE organization_id = $1`
+	var count int
+	err := r.pool.QueryRow(ctx, query, orgID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count organization users: %w", err)
+	}
+	return count, nil
+}
+

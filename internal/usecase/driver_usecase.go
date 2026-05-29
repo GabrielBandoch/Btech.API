@@ -13,15 +13,17 @@ type DriverUseCase interface {
 }
 
 type driverUseCase struct {
-	repo         domain.DriverRepository
-	auditUseCase AuditUseCase
+	repo               domain.DriverRepository
+	entitlementUseCase EntitlementUseCase
+	auditUseCase       AuditUseCase
 }
 
-// NewDriverUseCase creates a new instance of DriverUseCase with injected repository and audit usecase.
-func NewDriverUseCase(repo domain.DriverRepository, auditUseCase AuditUseCase) DriverUseCase {
+// NewDriverUseCase creates a new instance of DriverUseCase with injected repository, entitlement usecase, and audit usecase.
+func NewDriverUseCase(repo domain.DriverRepository, entitlementUseCase EntitlementUseCase, auditUseCase AuditUseCase) DriverUseCase {
 	return &driverUseCase{
-		repo:         repo,
-		auditUseCase: auditUseCase,
+		repo:               repo,
+		entitlementUseCase: entitlementUseCase,
+		auditUseCase:       auditUseCase,
 	}
 }
 
@@ -37,6 +39,20 @@ func (uc *driverUseCase) GetDriverByID(ctx context.Context, orgID string, id str
 
 // CreateDriver registers a new driver for the organization.
 func (uc *driverUseCase) CreateDriver(ctx context.Context, orgID string, driver domain.Driver) (domain.Driver, error) {
+	// Count existing drivers to evaluate quota
+	count, err := uc.repo.Count(ctx, orgID)
+	if err != nil {
+		return domain.Driver{}, err
+	}
+
+	allowed, err := uc.entitlementUseCase.EvaluateQuota(ctx, orgID, domain.EntitlementDriversMax, count)
+	if err != nil {
+		return domain.Driver{}, err
+	}
+	if !allowed {
+		return domain.Driver{}, domain.ErrQuotaExceeded
+	}
+
 	d, err := uc.repo.Create(ctx, orgID, driver)
 	if err != nil {
 		return d, err

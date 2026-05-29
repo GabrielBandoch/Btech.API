@@ -14,9 +14,10 @@ type Config struct {
 	APIVersion     string
 	TimeoutSeconds int
 	DatabaseURL    string
-	JWTSecret      string
-	JWTExpiresIn   string
-	BCryptCost     int
+	JWTSecret             string
+	JWTExpiresIn           string
+	RefreshTokenExpiresIn  string
+	BCryptCost             int
 	RateLimitRate  float64
 	RateLimitBurst float64
 }
@@ -73,6 +74,11 @@ func Load() *Config {
 		jwtExpiresIn = "24h"
 	}
 
+	refreshTokenExpiresIn := os.Getenv("REFRESH_TOKEN_EXPIRES_IN")
+	if refreshTokenExpiresIn == "" {
+		refreshTokenExpiresIn = "168h" // 7 days
+	}
+
 	bcryptCostStr := os.Getenv("BCRYPT_COST")
 	bcryptCost := 10 // default
 	if bcryptCostStr != "" {
@@ -104,9 +110,10 @@ func Load() *Config {
 		APIVersion:     apiVersion,
 		TimeoutSeconds: timeoutSec,
 		DatabaseURL:    dbURL,
-		JWTSecret:      jwtSecret,
-		JWTExpiresIn:   jwtExpiresIn,
-		BCryptCost:     bcryptCost,
+		JWTSecret:             jwtSecret,
+		JWTExpiresIn:           jwtExpiresIn,
+		RefreshTokenExpiresIn:  refreshTokenExpiresIn,
+		BCryptCost:             bcryptCost,
 		RateLimitRate:  rateLimitRate,
 		RateLimitBurst: rateLimitBurst,
 	}
