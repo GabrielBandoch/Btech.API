@@ -189,6 +189,7 @@ func SeedDevelopmentDatabase(
 	// 6. Seed Vehicles
 	vehicles := []struct {
 		ID      string
+		Placa   string
 		Brand   string
 		Model   string
 		Year    int
@@ -196,18 +197,18 @@ func SeedDevelopmentDatabase(
 		Mileage int
 		Status  string
 	}{
-		{ID: "VH-001", Brand: "Mercedes-Benz", Model: "Actros", Year: 2022, Type: "Truck", Mileage: 125000, Status: "disponivel"},
-		{ID: "VH-002", Brand: "Volvo", Model: "FH 540", Year: 2023, Type: "Truck", Mileage: 98000, Status: "disponivel"},
-		{ID: "VH-003", Brand: "Scania", Model: "R 450", Year: 2021, Type: "Truck", Mileage: 182000, Status: "manutencao"},
+		{ID: "VH-001", Placa: "BRA-2E19", Brand: "Mercedes-Benz", Model: "Actros", Year: 2022, Type: "Truck", Mileage: 125000, Status: "disponivel"},
+		{ID: "VH-002", Placa: "KGB-8840", Brand: "Volvo", Model: "FH 540", Year: 2023, Type: "Truck", Mileage: 98000, Status: "disponivel"},
+		{ID: "VH-003", Placa: "MLX-9018", Brand: "Scania", Model: "R 450", Year: 2021, Type: "Truck", Mileage: 182000, Status: "manutencao"},
 	}
 
 	for _, v := range vehicles {
 		_, err = pool.Exec(ctx, `
 			INSERT INTO vehicles (
-				id, organization_id, brand, model, year, type, mileage, status, created_at, updated_at
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+				id, organization_id, placa, brand, model, year, type, mileage, status, created_at, updated_at
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
 			ON CONFLICT (id) DO NOTHING`,
-			v.ID, orgID, v.Brand, v.Model, v.Year, v.Type, v.Mileage, v.Status, now,
+			v.ID, orgID, v.Placa, v.Brand, v.Model, v.Year, v.Type, v.Mileage, v.Status, now,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to seed vehicle %s: %w", v.ID, err)
