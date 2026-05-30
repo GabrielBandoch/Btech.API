@@ -163,3 +163,74 @@ func (r *PostgresDriverRepository) Count(ctx context.Context, orgID string) (int
 	}
 	return count, nil
 }
+
+func (r *PostgresDriverRepository) Update(ctx context.Context, orgID string, id string, driver domain.Driver) (domain.Driver, error) {
+	existing, err := r.GetByID(ctx, orgID, id)
+	if err != nil {
+		return domain.Driver{}, err
+	}
+
+	if driver.Name != "" {
+		existing.Name = driver.Name
+	}
+	if driver.Avatar != "" {
+		existing.Avatar = driver.Avatar
+	}
+	if driver.Status != "" {
+		existing.Status = driver.Status
+	}
+	if driver.Score != 0 {
+		existing.Score = driver.Score
+	}
+	if driver.TripsCount != 0 {
+		existing.TripsCount = driver.TripsCount
+	}
+	if driver.IncidentsCount != 0 {
+		existing.IncidentsCount = driver.IncidentsCount
+	}
+	if driver.NextScale != "" {
+		existing.NextScale = driver.NextScale
+	}
+	if driver.Role != "" {
+		existing.Role = driver.Role
+	}
+	if driver.LicenseExpiry != "" {
+		existing.LicenseExpiry = driver.LicenseExpiry
+	}
+	if driver.ToxicologyExpiry != "" {
+		existing.ToxicologyExpiry = driver.ToxicologyExpiry
+	}
+	if driver.TrainingExpiry != "" {
+		existing.TrainingExpiry = driver.TrainingExpiry
+	}
+	existing.UpdatedAt = time.Now()
+
+	query := `UPDATE drivers 
+	          SET name = $1, avatar = $2, status = $3, score = $4, trips_count = $5, incidents_count = $6, 
+	              next_scale = $7, role = $8, license_expiry = $9, toxicology_expiry = $10, training_expiry = $11, 
+	              updated_at = $12 
+	          WHERE organization_id = $13 AND id = $14 AND deleted_at IS NULL`
+
+	_, err = r.pool.Exec(ctx, query,
+		existing.Name,
+		existing.Avatar,
+		existing.Status,
+		existing.Score,
+		existing.TripsCount,
+		existing.IncidentsCount,
+		existing.NextScale,
+		existing.Role,
+		existing.LicenseExpiry,
+		existing.ToxicologyExpiry,
+		existing.TrainingExpiry,
+		existing.UpdatedAt,
+		orgID,
+		id,
+	)
+
+	if err != nil {
+		return domain.Driver{}, fmt.Errorf("failed to update driver in db: %w", err)
+	}
+
+	return existing, nil
+}

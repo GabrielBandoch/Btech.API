@@ -34,6 +34,7 @@ type DriverRepository interface {
 	GetAll(ctx context.Context, orgID string) ([]Driver, error)
 	GetByID(ctx context.Context, orgID string, id string) (Driver, error)
 	Create(ctx context.Context, orgID string, driver Driver) (Driver, error)
+	Update(ctx context.Context, orgID string, id string, driver Driver) (Driver, error)
 	Count(ctx context.Context, orgID string) (int, error)
 }
 

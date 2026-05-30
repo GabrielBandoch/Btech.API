@@ -29,6 +29,13 @@ const (
 	EventVehicleUpdate      = "vehicle.update"
 	EventVehicleDelete      = "vehicle.delete"
 
+	EventDriverDocumentCreate   = "driver_document.create"
+	EventDriverDocumentUpdate   = "driver_document.update"
+	EventDriverDocumentDelete   = "driver_document.delete"
+	EventDriverDocumentUpload   = "driver_document.upload"
+	EventDriverDocumentDownload = "driver_document.download"
+	EventDriverDocumentView     = "driver_document.view"
+
 	EventMaintenanceSupplierCreate = "maintenance_supplier.create"
 	EventMaintenanceSupplierUpdate = "maintenance_supplier.update"
 	EventMaintenanceSupplierDelete = "maintenance_supplier.delete"

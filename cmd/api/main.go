@@ -16,6 +16,7 @@ import (
 	"github.com/btech/fleetcontrol-api/internal/delivery/http/middleware"
 	"github.com/btech/fleetcontrol-api/internal/platform/database"
 	"github.com/btech/fleetcontrol-api/internal/platform/logger"
+	"github.com/btech/fleetcontrol-api/internal/platform/storage"
 	"github.com/btech/fleetcontrol-api/internal/repository/postgres"
 	"github.com/btech/fleetcontrol-api/internal/usecase"
 )
@@ -80,6 +81,18 @@ func main() {
 	maintenanceRepo := postgres.NewPostgresMaintenanceRepository(db.Pool)
 	maintenanceAlertRepo := postgres.NewPostgresMaintenanceAlertRepository(db.Pool)
 	fuelRepo := postgres.NewFuelRepository(db.Pool, log)
+	driverDocumentRepo := postgres.NewPostgresDriverDocumentRepository(db.Pool)
+
+	// Local filesystem storage setup
+	storageBaseDir := os.Getenv("STORAGE_BASE_DIR")
+	if storageBaseDir == "" {
+		storageBaseDir = "uploads"
+	}
+	storageBaseURL := os.Getenv("STORAGE_BASE_URL")
+	if storageBaseURL == "" {
+		storageBaseURL = "http://localhost:" + cfg.Port + "/uploads"
+	}
+	storageService := storage.NewLocalFileStorage(storageBaseDir, storageBaseURL)
 
 	// Auto-seed development database if in development mode
 	if cfg.Env == "development" {
@@ -115,6 +128,7 @@ func main() {
 		log,
 	)
 	fuelUseCase := usecase.NewFuelUseCase(fuelRepo, vehicleRepo, driverRepo, auditUseCase, log)
+	driverDocumentUseCase := usecase.NewDriverDocumentUseCase(driverDocumentRepo, driverRepo, storageService, auditUseCase, log)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authUseCase)
@@ -124,6 +138,7 @@ func main() {
 	vehicleHandler := handler.NewVehicleHandler(vehicleUseCase)
 	maintenanceHandler := handler.NewMaintenanceHandler(maintenanceUseCase)
 	fuelHandler := handler.NewFuelHandler(fuelUseCase)
+	driverDocumentHandler := handler.NewDriverDocumentHandler(driverDocumentUseCase)
 
 	// Middlewares
 	middleware.SetAuditUseCase(auditUseCase)
@@ -131,7 +146,7 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRate, cfg.RateLimitBurst)
 
 	// 5. Setup Router
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, maintenanceHandler, fuelHandler, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, maintenanceHandler, fuelHandler, driverDocumentHandler, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
 
 	// 6. Setup Server
 	serverAddr := ":" + cfg.Port

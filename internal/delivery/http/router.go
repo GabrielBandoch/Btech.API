@@ -26,6 +26,7 @@ func NewRouter(
 	vehicleHandler *handler.VehicleHandler,
 	maintenanceHandler *handler.MaintenanceHandler,
 	fuelHandler *handler.FuelHandler,
+	driverDocumentHandler *handler.DriverDocumentHandler,
 	authMiddleware func(http.Handler) http.Handler,
 	rateLimiterMiddleware func(http.Handler) http.Handler,
 	entitlementUseCase usecase.EntitlementUseCase,
@@ -78,6 +79,16 @@ func NewRouter(
 			r.Get("/drivers", driverHandler.GetDrivers)
 			r.Get("/drivers/{id}", driverHandler.GetDriverByID)
 			r.With(customMiddleware.RequirePermission(domain.PermissionDriversCreate)).Post("/drivers", driverHandler.CreateDriver)
+
+			// Driver Documents
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsRead)).Get("/drivers/{driverId}/documents", driverDocumentHandler.GetDocuments)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsRead)).Get("/drivers/{driverId}/documents/{id}", driverDocumentHandler.GetDocumentByID)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsCreate)).Post("/drivers/{driverId}/documents", driverDocumentHandler.CreateDocument)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsUpdate)).Put("/drivers/{driverId}/documents/{id}", driverDocumentHandler.UpdateDocument)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsDelete)).Delete("/drivers/{driverId}/documents/{id}", driverDocumentHandler.DeleteDocument)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsCreate)).Post("/drivers/{driverId}/documents/{id}/upload", driverDocumentHandler.UploadAttachment)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsDelete)).Delete("/drivers/{driverId}/documents/{id}/files/{fileId}", driverDocumentHandler.DeleteAttachment)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsRead)).Get("/drivers/documents/dashboard", driverDocumentHandler.GetDashboard)
 
 			// Trips
 			r.Get("/trips", tripHandler.GetTrips)

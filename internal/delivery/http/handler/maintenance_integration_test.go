@@ -98,7 +98,7 @@ func TestMaintenanceIntegration(t *testing.T) {
 	authMiddleware := middleware.AuthMiddleware(authUseCase)
 	rateLimiter := middleware.NewRateLimiter(100.0, 100.0)
 
-	router := delivery.NewRouter(cfg, nil, nil, nil, authHandler, vehicleHandler, maintenanceHandler, nil, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
+	router := delivery.NewRouter(cfg, nil, nil, nil, authHandler, vehicleHandler, maintenanceHandler, nil, nil, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
 
 	// 1. Register a test user
 	regPayload := `{"name":"Maint Operator","email":"maint@btech.com","password":"SecurePassword123!","role":"admin"}`

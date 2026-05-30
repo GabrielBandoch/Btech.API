@@ -5,3 +5,27 @@ Accept: application/json
 ### Get Drivers Endpoint
 GET http://localhost:8080/api/v1/drivers
 Accept: application/json
+
+### Get Driver Documents Endpoint
+GET http://localhost:8080/api/v1/drivers/DRV-1/documents
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Get Documents Dashboard Endpoint
+GET http://localhost:8080/api/v1/drivers/documents/dashboard
+Accept: application/json
+Authorization: Bearer {{token}}
+
+### Create Driver Document Endpoint
+POST http://localhost:8080/api/v1/drivers/DRV-1/documents
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "type": "cnh",
+  "documentNumber": "1234567890",
+  "issuingAuthority": "DETRAN",
+  "issueDate": "2025-01-01T00:00:00Z",
+  "expirationDate": "2030-01-01T00:00:00Z",
+  "notes": "Carteira nacional de habilitação categoria AE"
+}

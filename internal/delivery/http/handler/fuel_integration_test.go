@@ -84,7 +84,7 @@ func TestFuelIntegration(t *testing.T) {
 	authMiddleware := middleware.AuthMiddleware(authUseCase)
 	rateLimiter := middleware.NewRateLimiter(100.0, 100.0)
 
-	router := delivery.NewRouter(cfg, nil, nil, nil, authHandler, vehicleHandler, nil, fuelHandler, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
+	router := delivery.NewRouter(cfg, nil, nil, nil, authHandler, vehicleHandler, nil, fuelHandler, nil, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
 
 	// 1. Register a test admin/owner user
 	regPayload := `{"name":"Fuel Manager","email":"fuel@btech.com","password":"SecurePassword123!","role":"admin"}`

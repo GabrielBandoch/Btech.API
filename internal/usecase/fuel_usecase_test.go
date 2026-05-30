@@ -165,6 +165,24 @@ func (m *mockDriverRepository) Create(ctx context.Context, orgID string, driver 
 	return domain.Driver{}, nil
 }
 
+func (m *mockDriverRepository) Update(ctx context.Context, orgID string, id string, driver domain.Driver) (domain.Driver, error) {
+	d, ok := m.drivers[id]
+	if !ok || d.OrganizationID != orgID {
+		return domain.Driver{}, errors.New("driver not found")
+	}
+	if driver.LicenseExpiry != "" {
+		d.LicenseExpiry = driver.LicenseExpiry
+	}
+	if driver.ToxicologyExpiry != "" {
+		d.ToxicologyExpiry = driver.ToxicologyExpiry
+	}
+	if driver.TrainingExpiry != "" {
+		d.TrainingExpiry = driver.TrainingExpiry
+	}
+	m.drivers[id] = d
+	return d, nil
+}
+
 func (m *mockDriverRepository) Count(ctx context.Context, orgID string) (int, error) {
 	return 0, nil
 }
