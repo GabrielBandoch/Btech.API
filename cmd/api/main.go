@@ -79,6 +79,7 @@ func main() {
 	maintenancePlanRepo := postgres.NewPostgresMaintenancePlanRepository(db.Pool)
 	maintenanceRepo := postgres.NewPostgresMaintenanceRepository(db.Pool)
 	maintenanceAlertRepo := postgres.NewPostgresMaintenanceAlertRepository(db.Pool)
+	fuelRepo := postgres.NewFuelRepository(db.Pool, log)
 
 	// Auto-seed development database if in development mode
 	if cfg.Env == "development" {
@@ -113,6 +114,7 @@ func main() {
 		auditUseCase,
 		log,
 	)
+	fuelUseCase := usecase.NewFuelUseCase(fuelRepo, vehicleRepo, driverRepo, auditUseCase, log)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authUseCase)
@@ -121,6 +123,7 @@ func main() {
 	incidentHandler := handler.NewIncidentHandler(incidentUseCase)
 	vehicleHandler := handler.NewVehicleHandler(vehicleUseCase)
 	maintenanceHandler := handler.NewMaintenanceHandler(maintenanceUseCase)
+	fuelHandler := handler.NewFuelHandler(fuelUseCase)
 
 	// Middlewares
 	middleware.SetAuditUseCase(auditUseCase)
@@ -128,7 +131,7 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(cfg.RateLimitRate, cfg.RateLimitBurst)
 
 	// 5. Setup Router
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, maintenanceHandler, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, maintenanceHandler, fuelHandler, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
 
 	// 6. Setup Server
 	serverAddr := ":" + cfg.Port

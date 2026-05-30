@@ -100,7 +100,7 @@ func TestOperationalIntegration(t *testing.T) {
 	authMiddleware := middleware.AuthMiddleware(authUseCase)
 	rateLimiter := middleware.NewRateLimiter(100.0, 100.0)
 
-	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, nil, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
+	router := delivery.NewRouter(cfg, driverHandler, tripHandler, incidentHandler, authHandler, vehicleHandler, nil, nil, authMiddleware, rateLimiter.Limit, entitlementUseCase, log)
 
 	// Register a test user (creates default organization)
 	regPayload := `{"name":"Operational Manager","email":"ops@btech.com","password":"SecurePassword123!","role":"admin"}`

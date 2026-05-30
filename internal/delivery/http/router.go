@@ -25,6 +25,7 @@ func NewRouter(
 	authHandler *handler.AuthHandler,
 	vehicleHandler *handler.VehicleHandler,
 	maintenanceHandler *handler.MaintenanceHandler,
+	fuelHandler *handler.FuelHandler,
 	authMiddleware func(http.Handler) http.Handler,
 	rateLimiterMiddleware func(http.Handler) http.Handler,
 	entitlementUseCase usecase.EntitlementUseCase,
@@ -122,6 +123,17 @@ func NewRouter(
 			// Maintenance Dashboard & Reports
 			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/dashboard", maintenanceHandler.GetDashboard)
 			r.With(customMiddleware.RequirePermission(domain.PermissionMaintenanceRead)).Get("/maintenance/reports/costs", maintenanceHandler.GetCostReport)
+
+			// Fuel Records
+			r.With(customMiddleware.RequirePermission(domain.PermissionFuelRead)).Get("/fuel/records", fuelHandler.GetRecords)
+			r.With(customMiddleware.RequirePermission(domain.PermissionFuelRead)).Get("/fuel/records/{id}", fuelHandler.GetRecordByID)
+			r.With(customMiddleware.RequirePermission(domain.PermissionFuelCreate)).Post("/fuel/records", fuelHandler.CreateRecord)
+			r.With(customMiddleware.RequirePermission(domain.PermissionFuelUpdate)).Put("/fuel/records/{id}", fuelHandler.UpdateRecord)
+			r.With(customMiddleware.RequirePermission(domain.PermissionFuelDelete)).Delete("/fuel/records/{id}", fuelHandler.DeleteRecord)
+
+			// Fuel Dashboard & Reports
+			r.With(customMiddleware.RequirePermission(domain.PermissionFuelRead)).Get("/fuel/dashboard", fuelHandler.GetDashboard)
+			r.With(customMiddleware.RequirePermission(domain.PermissionFuelRead)).Get("/fuel/reports/efficiency", fuelHandler.GetEfficiencyReport)
 
 			// Advanced Reports (Protected by Billing Entitlement)
 			r.With(customMiddleware.RequireEntitlement(entitlementUseCase, domain.EntitlementFeatureAdvancedReports)).

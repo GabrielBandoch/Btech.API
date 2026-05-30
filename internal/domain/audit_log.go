@@ -44,6 +44,12 @@ const (
 
 	EventMaintenanceAlertCreated  = "maintenance.alert.created"
 	EventMaintenanceAlertResolved = "maintenance.alert.resolved"
+
+	// Fuel events
+	EventFuelCreate  = "fuel.create"
+	EventFuelUpdate  = "fuel.update"
+	EventFuelDelete  = "fuel.delete"
+	EventFuelAnomaly = "fuel.anomaly" // generated alongside fuel.create when anomaly detected
 )
 
 type ContextKey string
