@@ -441,7 +441,7 @@ func (uc *maintenanceUseCase) CheckAlertsForVehicle(ctx context.Context, orgID s
 // Helpers
 func (uc *maintenanceUseCase) calculateNextDue(ctx context.Context, orgID string, plan *domain.MaintenancePlan) {
 	lastKM := 0
-	if plan.LastMaintenanceKM != nil {
+	if plan.LastMaintenanceKM != nil && *plan.LastMaintenanceKM > 0 {
 		lastKM = *plan.LastMaintenanceKM
 	} else {
 		// Fallback to current vehicle mileage
@@ -497,7 +497,14 @@ func (uc *maintenanceUseCase) handleMaintenanceSideEffects(ctx context.Context, 
 		planID := *m.MaintenancePlanID
 		plan, err := uc.planRepo.GetByID(ctx, orgID, planID)
 		if err == nil {
-			plan.LastMaintenanceKM = &m.OdometerAtService
+			if m.OdometerAtService > 0 {
+				plan.LastMaintenanceKM = &m.OdometerAtService
+			} else {
+				v, errVeh := uc.vehicleRepo.GetByID(ctx, orgID, m.VehicleID)
+				if errVeh == nil {
+					plan.LastMaintenanceKM = &v.Mileage
+				}
+			}
 			plan.LastMaintenanceDate = &m.Date
 
 			// Recalculate and update
