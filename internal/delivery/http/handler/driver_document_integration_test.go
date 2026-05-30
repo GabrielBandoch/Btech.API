@@ -84,7 +84,7 @@ func TestDriverDocumentIntegration(t *testing.T) {
 	auditUseCase := usecase.NewAuditUseCase(auditLogRepo, log)
 	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, sessionRepo, auditUseCase, cfg.JWTSecret, 15*time.Minute, 24*time.Hour, 4)
 	entitlementUseCase := usecase.NewEntitlementUseCase(subscriptionRepo, planRepo, entitlementRepo, auditUseCase)
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase, auditLogRepo)
 	driverDocumentUseCase := usecase.NewDriverDocumentUseCase(driverDocumentRepo, driverRepo, storageService, auditUseCase, log)
 
 	// Handlers

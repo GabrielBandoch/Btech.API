@@ -85,7 +85,7 @@ func TestOperationalIntegration(t *testing.T) {
 	billingUseCase := usecase.NewBillingUseCase(subscriptionRepo, planRepo, auditUseCase, log)
 	entitlementUseCase := usecase.NewEntitlementUseCase(subscriptionRepo, planRepo, entitlementRepo, auditUseCase)
 
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase, auditLogRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)

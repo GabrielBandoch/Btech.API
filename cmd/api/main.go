@@ -114,7 +114,7 @@ func main() {
 	usageTrackingUseCase := usecase.NewUsageTrackingUseCase(usageRepo, entitlementUseCase, auditUseCase)
 	_ = usageTrackingUseCase // make sure it's referenced or register it as needed
 
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase, auditLogRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)

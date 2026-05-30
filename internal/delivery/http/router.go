@@ -76,9 +76,10 @@ func NewRouter(
 			r.Delete("/auth/sessions/{id}", authHandler.RevokeSession)
 
 			// Drivers
-			r.Get("/drivers", driverHandler.GetDrivers)
-			r.Get("/drivers/{id}", driverHandler.GetDriverByID)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriversRead)).Get("/drivers", driverHandler.GetDrivers)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriversRead)).Get("/drivers/{id}", driverHandler.GetDriverByID)
 			r.With(customMiddleware.RequirePermission(domain.PermissionDriversCreate)).Post("/drivers", driverHandler.CreateDriver)
+			r.With(customMiddleware.RequirePermission(domain.PermissionDriversRead)).Get("/drivers/{id}/audit", driverHandler.GetDriverAuditLogs)
 
 			// Driver Documents
 			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsRead)).Get("/drivers/{driverId}/documents", driverDocumentHandler.GetDocuments)
@@ -91,12 +92,12 @@ func NewRouter(
 			r.With(customMiddleware.RequirePermission(domain.PermissionDriverDocumentsRead)).Get("/drivers/documents/dashboard", driverDocumentHandler.GetDashboard)
 
 			// Trips
-			r.Get("/trips", tripHandler.GetTrips)
-			r.Get("/trips/{id}", tripHandler.GetTripByID)
+			r.With(customMiddleware.RequirePermission(domain.PermissionTripsRead)).Get("/trips", tripHandler.GetTrips)
+			r.With(customMiddleware.RequirePermission(domain.PermissionTripsRead)).Get("/trips/{id}", tripHandler.GetTripByID)
 			r.With(customMiddleware.RequirePermission(domain.PermissionTripsUpdate)).Put("/trips/{id}", tripHandler.UpdateTrip)
 
 			// Incidents
-			r.Get("/incidents", incidentHandler.GetIncidents)
+			r.With(customMiddleware.RequirePermission(domain.PermissionIncidentsRead)).Get("/incidents", incidentHandler.GetIncidents)
 			r.With(customMiddleware.RequirePermission(domain.PermissionIncidentsCreate)).Post("/incidents", incidentHandler.CreateIncident)
 			r.With(customMiddleware.RequirePermission(domain.PermissionIncidentsCreate)).Put("/incidents/{id}", incidentHandler.UpdateIncident)
 

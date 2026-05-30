@@ -80,7 +80,7 @@ func TestBillingIntegration(t *testing.T) {
 	usageTrackingUseCase := usecase.NewUsageTrackingUseCase(usageRepo, entitlementUseCase, auditUseCase)
 	_ = usageTrackingUseCase
 
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, entitlementUseCase, auditUseCase, auditLogRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)

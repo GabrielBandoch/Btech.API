@@ -99,3 +99,28 @@ func (h *DriverHandler) CreateDriver(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusCreated, true, dto.FromDomain(created), "")
 }
+
+// GetDriverAuditLogs handles fetching audit logs for a single driver.
+func (h *DriverHandler) GetDriverAuditLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	orgID, ok := middleware.OrganizationIDFromContext(ctx)
+	if !ok {
+		response.Error(w, http.StatusUnauthorized, "unauthorized: organization context missing")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		response.Error(w, http.StatusBadRequest, "driver ID is required")
+		return
+	}
+
+	logs, err := h.useCase.GetDriverAuditLogs(ctx, orgID, id)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "failed to retrieve driver audit logs")
+		return
+	}
+
+	response.OK(w, logs)
+}
+

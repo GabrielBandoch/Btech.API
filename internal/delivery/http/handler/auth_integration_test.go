@@ -110,7 +110,7 @@ func TestAuthIntegration(t *testing.T) {
 	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, sessionRepo, auditUseCase, cfg.JWTSecret, jwtExpires, 7*24*time.Hour, 4) // cost = 4 for fast testing
 	
 	mockEntitlementUC := &mockEntitlementUseCase{}
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, mockEntitlementUC, auditUseCase)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, mockEntitlementUC, auditUseCase, auditLogRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)
@@ -585,7 +585,7 @@ func TestAuthRateLimiting(t *testing.T) {
 	tripRepo := postgres.NewPostgresTripRepository(nil)
 	incidentRepo := postgres.NewPostgresIncidentRepository(nil)
 	mockEntitlementUC := &mockEntitlementUseCase{}
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, mockEntitlementUC, auditUseCase)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, mockEntitlementUC, auditUseCase, nil)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)

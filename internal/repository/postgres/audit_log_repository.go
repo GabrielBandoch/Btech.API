@@ -98,3 +98,57 @@ func (r *PostgresAuditLogRepository) GetByOrganization(ctx context.Context, orgI
 
 	return logs, nil
 }
+
+func (r *PostgresAuditLogRepository) GetByDriver(ctx context.Context, orgID string, driverID string, driverName string) ([]*domain.AuditLog, error) {
+	query := `
+		SELECT id, actor_user_id, organization_id, action, entity_type, entity_id, metadata, ip_address, user_agent, created_at
+		FROM audit_logs
+		WHERE organization_id = $1 AND (
+			(entity_type = 'driver' AND entity_id = $2) OR
+			(entity_type = 'driver_document' AND entity_id IN (SELECT id FROM driver_documents WHERE driver_id = $2)) OR
+			(entity_type = 'incident' AND (metadata->>'driver_name' = $3 OR entity_id IN (SELECT id FROM incidents WHERE driver_name = $3)))
+		)
+		ORDER BY created_at DESC`
+
+	rows, err := r.pool.Query(ctx, query, orgID, driverID, driverName)
+	if err != nil {
+		return nil, fmt.Errorf("database error fetching driver audit logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []*domain.AuditLog
+	for rows.Next() {
+		var l domain.AuditLog
+		var metadataBytes []byte
+		err := rows.Scan(
+			&l.ID,
+			&l.ActorUserID,
+			&l.OrganizationID,
+			&l.Action,
+			&l.EntityType,
+			&l.EntityID,
+			&metadataBytes,
+			&l.IPAddress,
+			&l.UserAgent,
+			&l.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan audit log row: %w", err)
+		}
+
+		if len(metadataBytes) > 0 {
+			if err := json.Unmarshal(metadataBytes, &l.Metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal audit log metadata: %w", err)
+			}
+		}
+
+		logs = append(logs, &l)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating audit log rows: %w", err)
+	}
+
+	return logs, nil
+}
+

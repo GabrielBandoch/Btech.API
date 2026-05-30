@@ -71,7 +71,7 @@ func TestSessionIntegration(t *testing.T) {
 	authUseCase := usecase.NewAuthUseCase(userRepo, orgRepo, permissionRepo, sessionRepo, auditUseCase, cfg.JWTSecret, 15*time.Minute, 24*time.Hour, 4)
 	
 	mockEntitlementUC := &mockEntitlementUseCase{}
-	driverUseCase := usecase.NewDriverUseCase(driverRepo, mockEntitlementUC, auditUseCase)
+	driverUseCase := usecase.NewDriverUseCase(driverRepo, mockEntitlementUC, auditUseCase, auditLogRepo)
 	tripUseCase := usecase.NewTripUseCase(tripRepo, auditUseCase)
 	incidentUseCase := usecase.NewIncidentUseCase(incidentRepo, auditUseCase)
 	vehicleUseCase := usecase.NewVehicleUseCase(vehicleRepo, auditUseCase)

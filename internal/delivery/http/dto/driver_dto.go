@@ -1,20 +1,26 @@
 package dto
 
-import "github.com/btech/fleetcontrol-api/internal/domain"
+import (
+	"time"
+
+	"github.com/btech/fleetcontrol-api/internal/domain"
+)
 
 type DriverResponse struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
-	Avatar           string `json:"avatar"`
-	Status           string `json:"status"`
-	Score            int    `json:"score"`
-	TripsCount       int    `json:"tripsCount"`
-	IncidentsCount   int    `json:"incidentsCount"`
-	NextScale        string `json:"nextScale,omitempty"`
-	Role             string `json:"role"`
-	LicenseExpiry    string `json:"licenseExpiry"`
-	ToxicologyExpiry string `json:"toxicologyExpiry"`
-	TrainingExpiry   string `json:"trainingExpiry"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Avatar           string    `json:"avatar"`
+	Status           string    `json:"status"`
+	Score            int       `json:"score"`
+	TripsCount       int       `json:"tripsCount"`
+	IncidentsCount   int       `json:"incidentsCount"`
+	NextScale        string    `json:"nextScale,omitempty"`
+	Role             string    `json:"role"`
+	LicenseExpiry    string    `json:"licenseExpiry"`
+	ToxicologyExpiry string    `json:"toxicologyExpiry"`
+	TrainingExpiry   string    `json:"trainingExpiry"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
 type CreateDriverRequest struct {
@@ -42,6 +48,8 @@ func FromDomain(d domain.Driver) DriverResponse {
 		LicenseExpiry:    d.LicenseExpiry,
 		ToxicologyExpiry: d.ToxicologyExpiry,
 		TrainingExpiry:   d.TrainingExpiry,
+		CreatedAt:        d.CreatedAt,
+		UpdatedAt:        d.UpdatedAt,
 	}
 }
 

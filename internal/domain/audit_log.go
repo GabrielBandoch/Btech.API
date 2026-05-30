@@ -84,4 +84,6 @@ type AuditLog struct {
 type AuditLogRepository interface {
 	Create(ctx context.Context, log *AuditLog) error
 	GetByOrganization(ctx context.Context, orgID string, limit, offset int) ([]*AuditLog, error)
+	GetByDriver(ctx context.Context, orgID string, driverID string, driverName string) ([]*AuditLog, error)
 }
+
